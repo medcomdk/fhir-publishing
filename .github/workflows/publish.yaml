@@ -60,17 +60,16 @@ jobs:
 
       - name: Update publication-request.json with the release version
         run: |
-          jq '
+          echo "$(jq '
             .version = env.RELEASE_VERSION |
             .path |= sub("/[0-9\\.]+$"; "/" + env.RELEASE_VERSION)
-          ' ${{ env.IG_CONTAINER_PATH }}/publication-request.json \
-            > ${{ env.IG_CONTAINER_PATH }}/publication-request.json
+          ' ${{ env.IG_CONTAINER_PATH }}/publication-request.json)" > ${{ env.IG_CONTAINER_PATH }}/publication-request.json
 
       - name: Print edited config files
         run: |
-          echo "===== sushi-config.yaml ====="
+          echo "======================== sushi-config.yaml ========================"
           cat ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml
-          echo "===== publication-request.json ====="
+          echo -n "\n\n======================== publication-request.json ========================\n"
           cat ${{ env.IG_CONTAINER_PATH }}/publication-request.json
 
       - name: Install the latest SUSHI
@@ -96,13 +95,17 @@ jobs:
           repository: ${{ github.repository_owner }}/${{ env.WEB_REPO }}
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.WEB_REPO_CONTAINER_PATH }}
+
           fetch-depth: 0
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             ig/index.md
             ig/dark-medcom-logo.png
-            ig/package-*.xml
-            ig/publish-*.json
+            ig/package-feed.xml
+            ig/package-registry.json
+            ig/publication-feed.xml
+            ig/publish-counter.json
+            ig/publish-setup.json
             ig/publish.ini
             ig/${{ env.IG_NAME }}/**
             ig/templates/**
@@ -138,30 +141,38 @@ jobs:
         shell: bash
         run: >-
           java -jar /input-cache/publisher.jar -go-publish
-            -source ${{ env.IG_CONTAINER_PATH }}
-            -web    ${{ env.WEB_REPO_CONTAINER_PATH }}/ig
-            -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
-            -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json 
-            -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
+          -source ${{ env.IG_CONTAINER_PATH }}
+          -web ${{ env.WEB_REPO_CONTAINER_PATH }}/ig
+          -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
+          -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json 
+          -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
 
       - name: Remove unnecessary files
-        run: rm -rf ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/ig-build-zips
+        shell: bash
+        run: |
+          rm --recursive --force --verbose ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/ig-build-zips
 
       - name: Update IG registry
         if: steps.scan_ig_list.outputs.already_present_in_ig_list == 'false'
+        shell: bash
         run: |
           export DESCRIPTION=$(yq -r .description ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml)
           export AUTHORITY=$(yq -r .publisher.name ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml)
+
           tmp=$(mktemp)
           tac ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json | \
-            sed -e '0,/\"description\"[[:space:]]*:/s#\"description\".*#\"description\": "'"$DESCRIPTION"'"#' \
-                -e '0,/\"authority\"[[:space:]]*:/s#\"authority\".*#\"authority\": "'"$AUTHORITY"'"#' \
-                -e '0,/\"country\"[[:space:]]*:/s#\"country\".*#\"country\": \"dk\"#' \
-          | tac > "$tmp" && mv "$tmp" ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
+          sed -e '0,/\"description\"[[:space:]]*:/s#\"description\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"description\": "'"$DESCRIPTION"'"#' \
+              -e '0,/\"authority\"[[:space:]]*:/s#\"authority\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"authority\": "'"$AUTHORITY"'"#' \
+              -e '0,/\"country\"[[:space:]]*:/s#\"country\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"country\": \"dk\"#' \
+          | tac > "$tmp" \
+          && mv "$tmp" ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
 
-      - name: Show new entry
-        run: jq '.guides[-1]' ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
-
+      - name: Show new publication IG publication registration entry
+        shell: bash
+        run: |
+          echo "$(jq '.guides[-1]' ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json)"
+          
+      # ─────── 🛠️ Commit & PR ───────
       - name: Configure Git
         run: |
           git config --global user.name  "${{ env.APP_AUTHOR_NAME }}"
@@ -172,20 +183,20 @@ jobs:
         with:
           token: ${{ steps.token.outputs.token }}
           commit-message: "chore: publish IG ${{ env.RELEASE_VERSION }}"
-          branch:       "publish-${{ env.IG_NAME }}-${{ env.RELEASE_VERSION }}-run-${{ github.run_number }}"
-          title:        "Publish IG ${{ env.RELEASE_VERSION }}"
+          branch: "publish-${{ env.IG_NAME }}-${{ env.RELEASE_VERSION }}-run-${{ github.run_number }}"
+          title: "Publish IG ${{ env.RELEASE_VERSION }}"
           body: |
             This PR was automatically generated by the MedCom publish workflow.
             It contains the transpiled IG output for version ${{ env.RELEASE_VERSION }}.
-          base:         main
-          path:         ${{ env.WEB_REPO_CONTAINER_PATH }}
+          base: main
+          path: ${{ env.WEB_REPO_CONTAINER_PATH }}
 
-      - name: Commit publication to registry
+      - name: commit publication to registry
         uses: actions-js/push@v1.5
         with:
-          github_token:  ${{ steps.token.outputs.token }}
-          author_name:   ${{ env.APP_AUTHOR_NAME }}
-          author_email:  ${{ env.APP_AUTHOR_EMAIL }}
-          repository:    ${{ github.repository_owner }}/${{ env.REGISTRY_REPO }}
-          branch:        develop
-          directory:     ${{ env.REGISTRY_REPO_CONTAINER_PATH }}
+          github_token: ${{ steps.token.outputs.token }}
+          author_name: ${{ env.APP_AUTHOR_NAME }}
+          author_email: ${{ env.APP_AUTHOR_EMAIL }}
+          repository: ${{ github.repository_owner }}/${{ env.REGISTRY_REPO }}
+          branch: develop
+          directory: ${{ env.REGISTRY_REPO_CONTAINER_PATH }}
