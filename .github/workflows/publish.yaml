@@ -161,9 +161,9 @@ jobs:
 
           tmp=$(mktemp)
           tac ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json | \
-          sed -e '0,/\"description\"[[:space:]]*:/s#\"description\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"description\": "'"$DESCRIPTION"'"#' \
-              -e '0,/\"authority\"[[:space:]]*:/s#\"authority\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"authority\": "'"$AUTHORITY"'"#' \
-              -e '0,/\"country\"[[:space:]]*:/s#\"country\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"country\": \"dk\"#' \
+          sed -e '0,/\"description\"[[:space:]]*:/s#\"description\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"description\" : "'"$DESCRIPTION"'"#' \
+              -e '0,/\"authority\"[[:space:]]*:/s#\"authority\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"authority\" : "'"$AUTHORITY"'"#' \
+              -e '0,/\"country\"[[:space:]]*:/s#\"country\"[[:space:]]*:[[:space:]]*\"[^\"]*\"#\"country\" : \"dk\"#' \
           | tac > "$tmp" \
           && mv "$tmp" ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
 
