@@ -182,7 +182,7 @@ jobs:
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ steps.token.outputs.token }}
-          commit-message: "chore: publish IG ${{ env.RELEASE_VERSION }}"
+          commit-message: "chore: publish ${{ env.IG_NAME }} IG ${{ env.RELEASE_VERSION }}"
           branch: "publish-${{ env.IG_NAME }}-${{ env.RELEASE_VERSION }}-run-${{ github.run_number }}"
           title: "Publish IG ${{ env.RELEASE_VERSION }}"
           body: |
