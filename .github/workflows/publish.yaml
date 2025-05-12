@@ -7,12 +7,14 @@ on:
         description: The tag you pushed, e.g. “1.2.3”
         required: true
         type: string
-
-    secrets:
       FHIR_PUBLICATION_BOT_APP_ID:
+        description: The APP ID of the publishing application installed in the MedComDk repo
         required: true
+        type: string
       PUBLISHER_APP_PRIVATE_KEY:
+        description: The APP Private Key of the publishing application installed in the MedComDk Repo
         required: true
+        type: string
 
 jobs:
   release:
@@ -84,8 +86,8 @@ jobs:
         id: token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.FHIR_PUBLICATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
+          app-id: ${{ inputs.FHIR_PUBLICATION_BOT_APP_ID }}
+          private-key: ${{ inputs.PUBLISHER_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: "${{ env.WEB_REPO }},${{ env.REGISTRY_REPO }}"
 
