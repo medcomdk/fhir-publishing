@@ -11,10 +11,9 @@ on:
         description: The APP ID of the publishing application installed in the MedComDk repo
         required: true
         type: string
+    secrets:
       PUBLISHER_APP_PRIVATE_KEY:
-        description: The APP Private Key of the publishing application installed in the MedComDk Repo
         required: true
-        type: string
 
 jobs:
   release:
@@ -87,7 +86,7 @@ jobs:
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ inputs.FHIR_PUBLICATION_BOT_APP_ID }}
-          private-key: ${{ inputs.PUBLISHER_APP_PRIVATE_KEY }}
+          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: "${{ env.WEB_REPO }},${{ env.REGISTRY_REPO }}"
 
