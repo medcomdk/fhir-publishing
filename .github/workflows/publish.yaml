@@ -125,9 +125,9 @@ jobs:
           if jq -e --arg canon "$CANONICAL" \
                '.guides[] | select(.canonical == $canon)' ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json \
              > /dev/null; then
-            echo "already_present_in_ig_list=true" >> $GITHUB_OUTPUT
+            echo "already_present_in_ig_list=true" >> $GITHUB_ENV
           else
-            echo "already_present_in_ig_list=false" >> $GITHUB_OUTPUT
+            echo "already_present_in_ig_list=false" >> $GITHUB_ENV
           fi
 
       - name: Fetch the IG history template repo
