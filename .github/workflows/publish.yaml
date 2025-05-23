@@ -15,6 +15,7 @@ on:
         description: With this you can override what version of the publisher should be used
         required: false
         default: NONE
+        type: string
 
     secrets:
       PUBLISHER_APP_PRIVATE_KEY:
