@@ -14,7 +14,7 @@ on:
       IG_PUBLISHER_VERSION:
         description: With this you can override what version of the publisher should be used
         required: false
-        default: NONE
+        default: 'NONE'
         type: string
 
     secrets:
@@ -82,7 +82,7 @@ jobs:
         run: npm install -g fsh-sushi
 
       - name: Download other version of publisher
-        if: ${{ inputs.IG_PUBLISHER_VERSION }} != 'NONE'
+        if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
         shell: bash
         run: |
             wget -O /input-cache/publisher.jar \
