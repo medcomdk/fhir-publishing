@@ -199,4 +199,5 @@ jobs:
           author_email: ${{ env.APP_AUTHOR_EMAIL }}
           repository: ${{ github.repository_owner }}/${{ env.REGISTRY_REPO }}
           branch: develop
+          message: "chore: publish ${{ env.IG_NAME }} IG ${{ env.RELEASE_VERSION }}"
           directory: ${{ env.REGISTRY_REPO_CONTAINER_PATH }}
