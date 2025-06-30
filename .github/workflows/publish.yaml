@@ -123,6 +123,11 @@ jobs:
             ig/${{ env.IG_NAME }}/**
             ig/templates/**
 
+      - name: Prepare IG website repo
+        shell: bash
+        run: |
+          rm ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/publish-counter.json
+
       - name: Fetch the IG registry repo
         uses: actions/checkout@v4
         with:
@@ -164,6 +169,7 @@ jobs:
         shell: bash
         run: |
           rm --recursive --force --verbose ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/ig-build-zips
+          rm ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/publish-counter.json
 
       - name: Update IG registry
         if: steps.scan_ig_list.outputs.already_present_in_ig_list == 'false'
