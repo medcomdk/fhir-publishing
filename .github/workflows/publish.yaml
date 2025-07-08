@@ -169,6 +169,8 @@ jobs:
         shell: bash
         run: |
           rm -f ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/history.html
+          rm -rf ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/assets-hist
+          rm -rf ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/dist-hist
 
       - name: Run the IG Publish process
         shell: bash
