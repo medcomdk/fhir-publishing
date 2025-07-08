@@ -16,15 +16,6 @@ on:
         required: false
         default: 'NONE'
         type: string
-      REGENERATE_HISTORY_TEMPLATE:
-        description: >-
-          Set to **YES** to rebuild history.html from the history template,
-          replacing the entire file and applying the latest styling.
-          Set to **NO** to keep the existing file and simply append a row
-          for the new release.
-        required: false
-        default: 'YES'
-        type: string
 
     secrets:
       PUBLISHER_APP_PRIVATE_KEY:
@@ -164,14 +155,6 @@ jobs:
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
 
-      - name: Remove old history page
-        if: ${{ inputs.REGENERATE_HISTORY_TEMPLATE == 'YES' }}
-        shell: bash
-        run: |
-          rm -f ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/history.html
-          rm -rf ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/assets-hist
-          rm -rf ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/dist-hist
-
       - name: Run the IG Publish process
         shell: bash
         run: >-
@@ -181,6 +164,21 @@ jobs:
           -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
           -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json 
           -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
+      
+      - name: Add history template files if not present
+        shell: bash
+        env:
+          WEB_ROOT: ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}
+          TEMPLATE_DIR: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
+        run: |
+          for dir in assets-hist dist-hist; do
+            if [ ! -d "$WEB_ROOT/$dir" ]; then
+              echo "::notice title=History assets::Copying $dir to $WEB_ROOT"
+              cp -R "$TEMPLATE_DIR/$dir" "$WEB_ROOT/"
+            else
+              echo "✅ $dir already present — skipping copy"
+            fi
+          done
 
       - name: Remove unnecessary files
         shell: bash
