@@ -16,6 +16,15 @@ on:
         required: false
         default: 'NONE'
         type: string
+      REGENERATE_HISTORY_TEMPLATE:
+        description: >-
+          Set to **YES** to rebuild history.html from the history template,
+          replacing the entire file and applying the latest styling.
+          Set to **NO** to keep the existing file and simply append a row
+          for the new release.
+        required: false
+        default: 'YES'
+        type: string
 
     secrets:
       PUBLISHER_APP_PRIVATE_KEY:
@@ -155,6 +164,12 @@ jobs:
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
 
+      - name: Remove old history page
+        if: ${{ inputs.REGENERATE_HISTORY_TEMPLATE == 'YES' }}
+        shell: bash
+        run: |
+          rm -f ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/${{ env.IG_NAME }}/history.html
+
       - name: Run the IG Publish process
         shell: bash
         run: >-
@@ -172,7 +187,7 @@ jobs:
           rm --force ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/publish-counter.json
 
       - name: Update IG registry
-        if: steps.scan_ig_list.outputs.already_present_in_ig_list == 'false'
+        if: env.already_present_in_ig_list == 'false'
         shell: bash
         run: |
           export DESCRIPTION=$(yq -r .description ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml)
