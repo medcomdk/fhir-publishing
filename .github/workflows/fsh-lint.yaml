@@ -1,0 +1,111 @@
+name: "FSH-Naming Lint"
+
+jobs:
+  lint:
+    name: Linting to ensure organization wide readability and homogenization
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout IG Source
+        uses: actions/checkout@v4
+        with:
+          path: ig
+      
+      - name: Validate naming rules
+        shell: bash
+        run: |
+          set -eo pipefail
+          tmp=$(mktemp)
+          echo '### FSH Naming Check' > "$tmp"
+          echo >> "$tmp"
+
+          fail=0
+
+          kebab() {                                     # PascalCase ➜ kebab-case
+            python - <<'PY' "$1"
+            import re,sys; print(re.sub(r'(?<!^)(?=[A-Z])','-',sys.argv[1]).lower())
+            PY
+          }
+
+          report_violation () {                         # helper to write bullets
+            echo "- ❌ $1" >> "$tmp"
+            fail=1
+          }
+
+          check_entry () {                             # name title id file line
+            local name="$1" title="$2" ident="$3" file="$4"
+            [[ "$name" =~ ^[A-Z][a-zA-Z0-9]*$ ]] || \
+              report_violation "\`$name\` in \`$file\` is **not** PascalCase"
+
+            if [[ -n "$title" && "$title" != "$name" ]]; then
+              report_violation "Title \"${title}\" ≠ \`${name}\` in \`${file}\`"
+            fi
+
+            if [[ -n "$ident" ]]; then
+              expected="$(kebab "$name")"
+              [[ "$ident" == "$expected" ]] || \
+                report_violation "Id \`${ident}\` should be \`${expected}\` (from \`${name}\`) in \`${file}\`"
+            fi
+          }
+
+          while IFS= read -r -d '' file; do
+            current_name="" current_title="" current_id=""
+            while IFS= read -r line; do
+              if [[ "$line" =~ ^(Profile|CodeSystem|ValueSet|Instance):[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
+                [[ -n "$current_name" ]] && check_entry "$current_name" "$current_title" "$current_id" "$file"
+                current_name="${BASH_REMATCH[2]}"
+                current_title="" current_id=""
+              elif [[ "$line" =~ ^[[:space:]]*Title:[[:space:]]+\"?([^\"]+)\"? ]]; then
+                current_title="${BASH_REMATCH[1]}"
+              elif [[ "$line" =~ ^[[:space:]]*Id:[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
+                current_id="${BASH_REMATCH[1]}"
+              fi
+            done < "$file"
+            [[ -n "$current_name" ]] && check_entry "$current_name" "$current_title" "$current_id" "$file"
+          done < <(find . -name '*.fsh' -print0)
+
+          if [[ $fail -eq 0 ]]; then
+            echo "✅ All names, titles and ids follow the rules." >> "$tmp"
+          fi
+
+          cat "$tmp"
+
+          echo "result<<EOF"        >> "$GITHUB_OUTPUT"
+          cat "$tmp"                >> "$GITHUB_OUTPUT"
+          echo "EOF"                >> "$GITHUB_OUTPUT"
+          echo "violations=$fail"   >> "$GITHUB_OUTPUT"
+
+          cat "$tmp" > lint_result.md
+
+      - name: Fail workflow if naming errors were found
+        if: ${{ steps.lint.outputs.violations != '0' }}
+        run: |
+          echo "::error::Naming-rules violations detected."
+          exit 1
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        env:
+          LINT_BODY: ${{ steps.lint.outputs.result }}
+        with:
+          script: |
+            const body = process.env.LINT_BODY;
+
+            const { owner, repo } = context.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            const existing = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: prNumber },
+            );
+
+            const ourComment = existing.find(c =>
+              c.user.type === 'Bot' &&
+              c.body.includes('### FSH Naming Check')
+            );
+
+            if (ourComment) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: ourComment.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
+            }
