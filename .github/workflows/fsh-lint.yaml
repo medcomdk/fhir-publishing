@@ -18,25 +18,27 @@ jobs:
         shell: bash
         run: |
           set -eo pipefail
+
           tmp=$(mktemp)
           echo '### FSH Naming Check' > "$tmp"
           echo >> "$tmp"
 
           fail=0
 
-          kebab() {                                     # PascalCase ➜ kebab-case
-            python - <<'PY' "$1"
-            import re,sys; print(re.sub(r'(?<!^)(?=[A-Z])','-',sys.argv[1]).lower())
-            PY
+          kebab() {
+            echo "$1" \
+              | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' \
+              | tr '[:upper:]' '[:lower:]'
           }
 
-          report_violation () {                         # helper to write bullets
+          report_violation () {
             echo "- ❌ $1" >> "$tmp"
             fail=1
           }
 
-          check_entry () {                             # name title id file line
+          check_entry () {  # name title id file
             local name="$1" title="$2" ident="$3" file="$4"
+
             [[ "$name" =~ ^[A-Z][a-zA-Z0-9]*$ ]] || \
               report_violation "\`$name\` in \`$file\` is **not** PascalCase"
 
@@ -45,12 +47,13 @@ jobs:
             fi
 
             if [[ -n "$ident" ]]; then
-              expected="$(kebab "$name")"
+              local expected; expected="$(kebab "$name")"
               [[ "$ident" == "$expected" ]] || \
                 report_violation "Id \`${ident}\` should be \`${expected}\` (from \`${name}\`) in \`${file}\`"
             fi
           }
 
+          # Walk through every *.fsh file
           while IFS= read -r -d '' file; do
             current_name="" current_title="" current_id=""
             while IFS= read -r line; do
