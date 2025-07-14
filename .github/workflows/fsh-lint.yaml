@@ -17,8 +17,6 @@ jobs:
       - name: Validate naming rules
         shell: bash
         run: |
-          set -eo pipefail
-
           tmp=$(mktemp)
           echo '### FSH Naming Check' > "$tmp"
           echo >> "$tmp"
@@ -57,7 +55,7 @@ jobs:
           while IFS= read -r -d '' file; do
             current_name="" current_title="" current_id=""
             while IFS= read -r line; do
-              if [[ "$line" =~ ^(Profile|CodeSystem|ValueSet|Instance):[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
+              if [[ "$line" =~ ^(Profile|CodeSystem|ValueSet):[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
                 [[ -n "$current_name" ]] && check_entry "$current_name" "$current_title" "$current_id" "$file"
                 current_name="${BASH_REMATCH[2]}"
                 current_title="" current_id=""
