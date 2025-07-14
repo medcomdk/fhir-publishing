@@ -83,9 +83,9 @@ jobs:
           LINT_RESULT: env.LINT_RESULT
         with:
           script: |
-            const titleOfComment = "## Linting Result: "
-            const resultEmoji = process.env.LINT_FAILURE === 0 ? ✅ : ❌
-            const body = titleOfComment + resultEmoji + "\n" + process.env.LINT_RESULT
+            const titleOfComment = "## Linting Result: ";
+            const resultEmoji = process.env.LINT_FAILURE === 0 ? "✅" : "❌";
+            const body = titleOfComment + resultEmoji + "\n" + process.env.LINT_RESULT;
 
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
