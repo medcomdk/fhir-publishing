@@ -1,7 +1,13 @@
 name: "FSH-Naming Lint"
 
 on:
-  workflow_call
+  workflow_call:
+    inputs:
+      WHITELISTED_KEBAB_CASE_WORDS:
+        description: Comma-seperated valid words in kebab-case. Defaults to medcom, meaning that 'MedCom' does not need to become med-com in kebab case.
+        required: false
+        default: 'medcom'
+        type: string
 
 jobs:
   lint:
@@ -14,71 +20,20 @@ jobs:
         with:
           path: ig
       
-      - name: Validate naming rules
+      - name: Setup Node for linting FSH files with Node
+        uses: actions/setup-node@v4
+      
+      - name: Validate FSH linting rules
         shell: bash
         run: |
-          tmp=$(mktemp)
-          echo '### FSH Naming Check' > "$tmp"
-          echo >> "$tmp"
+          result=$(node scripts/validate-fsh.js ./ig/input --whitelist=${{ inputs.WHITELISTED_KEBAB_CASE_WORDS }})
+          echo "LINT_RESULT=$result" >> $GITHUB_ENV
+          has_problem=0
+          case $(printf '%s\n' "$result" | tr '[:upper:]' '[:lower:]') in
+            *problems*) has_problem=1 ;;
+          esac
 
-          fail=0
-
-          kebab() {
-            echo "$1" \
-              | sed -E 's/([a-z0-9])([A-Z])/\1-\2/g' \
-              | tr '[:upper:]' '[:lower:]'
-          }
-
-          report_violation () {
-            echo "- ❌ $1" >> "$tmp"
-            fail=1
-          }
-
-          check_entry () {  # name title id file
-            local name="$1" title="$2" ident="$3" file="$4"
-
-            [[ "$name" =~ ^[A-Z][a-zA-Z0-9]*$ ]] || \
-              report_violation "\`$name\` in \`$file\` is **not** PascalCase"
-
-            if [[ -n "$title" && "$title" != "$name" ]]; then
-              report_violation "Title \"${title}\" ≠ \`${name}\` in \`${file}\`"
-            fi
-
-            if [[ -n "$ident" ]]; then
-              local expected; expected="$(kebab "$name")"
-              [[ "$ident" == "$expected" ]] || \
-                report_violation "Id \`${ident}\` should be \`${expected}\` (from \`${name}\`) in \`${file}\`"
-            fi
-          }
-
-          # Walk through every *.fsh file
-          while IFS= read -r -d '' file; do
-            current_name="" current_title="" current_id=""
-            while IFS= read -r line; do
-              if [[ "$line" =~ ^(Profile|CodeSystem|ValueSet):[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
-                [[ -n "$current_name" ]] && check_entry "$current_name" "$current_title" "$current_id" "$file"
-                current_name="${BASH_REMATCH[2]}"
-                current_title="" current_id=""
-              elif [[ "$line" =~ ^[[:space:]]*Title:[[:space:]]+\"?([^\"]+)\"? ]]; then
-                current_title="${BASH_REMATCH[1]}"
-              elif [[ "$line" =~ ^[[:space:]]*Id:[[:space:]]+([A-Za-z0-9_.-]+) ]]; then
-                current_id="${BASH_REMATCH[1]}"
-              fi
-            done < "$file"
-            [[ -n "$current_name" ]] && check_entry "$current_name" "$current_title" "$current_id" "$file"
-          done < <(find . -name '*.fsh' -print0)
-
-          if [[ $fail -eq 0 ]]; then
-            echo "✅ All names, titles and ids follow the rules." >> "$tmp"
-          fi
-
-          cat "$tmp"
-          {
-            echo 'LINT_RESULT<<EOF'
-            cat  "$tmp"
-            echo 'EOF'
-          } >>"$GITHUB_ENV"
-          echo "LINT_FAILURE=$fail" >> "$GITHUB_ENV"
+          echo "LINT_FAILURE=$has_problem" >> $GITHUB_ENV
 
       - name: Comment on PR
         uses: actions/github-script@v7
