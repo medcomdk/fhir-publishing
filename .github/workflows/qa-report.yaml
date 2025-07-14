@@ -2,12 +2,12 @@ name: MedCom publish job
 
 on:
   workflow_call:
-  inputs:
-    IG_PUBLISHER_VERSION:
-      description: With this you can override what version of the publisher should be used
-      required: false
-      default: 'NONE'
-      type: string
+    inputs:
+      IG_PUBLISHER_VERSION:
+        description: With this you can override what version of the publisher should be used
+        required: false
+        default: 'NONE'
+        type: string
 
 jobs:
   qa-report-status:
