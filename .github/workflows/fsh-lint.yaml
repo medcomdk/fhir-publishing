@@ -73,8 +73,8 @@ jobs:
           fi
 
           cat "$tmp"
-          cat "LINT_RESULT=$tmp" >> "$GITHUB_ENV"
-          cat "LINT_FAILURE=$fail" >> "$GITHUB_ENV"
+          echo "LINT_RESULT=$tmp" >> "$GITHUB_ENV"
+          echo "LINT_FAILURE=$fail" >> "$GITHUB_ENV"
 
       - name: Comment on PR
         uses: actions/github-script@v7
