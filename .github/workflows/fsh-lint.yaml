@@ -107,6 +107,6 @@ jobs:
             }
 
       - name: Fail workflow if linting was not succesful
-        if: env.LINT_FAILURE === 1
+        if: env.LINT_FAILURE == 1
         run: |
           exit 1
