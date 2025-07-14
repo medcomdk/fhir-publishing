@@ -73,7 +73,7 @@ jobs:
           fi
 
           cat "$tmp"
-          echo "LINT_RESULT=$tmp" >> "$GITHUB_ENV"
+          echo "LINT_RESULT=$(cat $tmp)" >> "$GITHUB_ENV"
           echo "LINT_FAILURE=$fail" >> "$GITHUB_ENV"
 
       - name: Comment on PR
@@ -105,3 +105,8 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
             }
+
+      - name: Fail workflow if linting was not succesful
+        if: env.LINT_FAILURE === 1
+        run: |
+          exit 1
