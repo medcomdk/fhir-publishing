@@ -1,5 +1,8 @@
 name: "FSH-Naming Lint"
 
+on:
+  workflow_call
+
 jobs:
   lint:
     name: Linting to ensure organization wide readability and homogenization
