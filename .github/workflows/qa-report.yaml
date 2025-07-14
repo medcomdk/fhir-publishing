@@ -14,14 +14,41 @@ jobs:
     name: "Comments the status of the QA report on the PR"
     runs-on: ubuntu-latest
     container: ghcr.io/trifork/ig-publisher:1.8.26
-
+  
     steps:
+    - name: Checkout IG Source
+      uses: actions/checkout@v4
+      with:
+        path: ig
+
+    - name: Install the latest SUSHI
+        run: npm install -g fsh-sushi
+
+    - name: Download other version of publisher
+        if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
+        shell: bash
+        run: |
+            wget -O /input-cache/publisher.jar \
+            https://github.com/HL7/fhir-ig-publisher/releases/download/${{ inputs.IG_PUBLISHER_VERSION }}/publisher.jar
+
+    - name: Transpile to prepare for publication
+      shell: bash
+      working-directory: ig
+      run: |
+        log=$(java -jar /input-cache/publisher.jar .)
+        qa_report_result=$(printf '%b' "$log" \
+        | sed $'s/\x1B\\[[0-9;]*[A-Za-z]//g' \
+        | grep -oE 'Errors: *[0-9]+, *Warnings: *[0-9]+, *Info: *[0-9]+, *Broken Links: *[0-9]+')
+        echo "QA_REPORT_RESULT=$qa_report_result" >> $GITHUB_ENV
+
     - name: Comment on PR
       uses: actions/github-script@v7
+      env:
+        QA_REPORT_RESULT: ${{ env.QA_REPORT_RESULT }}
       with:
         script: |
           const titleOfComment = "## QA Report status"
-          const body = titleOfComment + "\nTest"
+          const body = titleOfComment + "\n" + process.env.QA_REPORT_RESULT
 
           const { owner, repo } = context.repo;
           const prNumber = context.payload.pull_request.number;

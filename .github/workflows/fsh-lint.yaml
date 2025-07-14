@@ -23,10 +23,17 @@ jobs:
       - name: Setup Node for linting FSH files with Node
         uses: actions/setup-node@v4
       
+      - name: Checkout fhir-publishing repo
+        uses: actions/checkout@v4 
+        with: 
+          repository: medcomdk/fhir-publishing
+          ref: main
+          path: self
+
       - name: Validate FSH linting rules
         shell: bash
         run: |
-          result=$(node scripts/validate-fsh.js ./ig/input --whitelist=${{ inputs.WHITELISTED_KEBAB_CASE_WORDS }})
+          result=$(node self/scripts/validate-fsh.js ./ig/input --whitelist=${{ inputs.WHITELISTED_KEBAB_CASE_WORDS }})
           echo "LINT_RESULT=$result" >> $GITHUB_ENV
           has_problem=0
           case $(printf '%s\n' "$result" | tr '[:upper:]' '[:lower:]') in
