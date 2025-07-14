@@ -94,8 +94,10 @@ jobs:
         env:
           LINT_BODY: ${{ steps.lint.outputs.result }}
         with:
+          lint: ${{ steps.lint.outputs.result }}
+
           script: |
-            const body = process.env.LINT_BODY;
+            const lintBody = core.getInput('lint') || '*No output from linter*';
 
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
