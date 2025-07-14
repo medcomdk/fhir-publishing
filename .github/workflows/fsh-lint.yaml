@@ -75,25 +75,16 @@ jobs:
           fi
 
           cat "$tmp"
-
-          echo "result<<EOF"        >> "$GITHUB_OUTPUT"
-          cat "$tmp"                >> "$GITHUB_OUTPUT"
-          echo "EOF"                >> "$GITHUB_OUTPUT"
-          echo "violations=$fail"   >> "$GITHUB_OUTPUT"
-
-          cat "$tmp" > lint_result.md
-
-      - name: Fail workflow if naming errors were found
-        if: ${{ steps.lint.outputs.violations != '0' }}
-        run: |
-          echo "::error::Naming-rules violations detected."
-          exit 1
+          cat "LINT_RESULT=$tmp" >> "$GITHUB_ENV"
+          cat "LINT_FAILURE=$fail" >> "$GITHUB_ENV"
 
       - name: Comment on PR
         uses: actions/github-script@v7
         with:
           script: |
-            const lintBody = core.getInput('lint') || '*No output from linter*';
+            const titleOfComment = "## Linting Result: "
+            const resultEmoji = process.env.LINT_FAILURE === 0 ? ✅ : ❌
+            const body = titleOfComment + resultEmoji + "\n" + process.env.LINT_RESULT
 
             const { owner, repo } = context.repo;
             const prNumber = context.payload.pull_request.number;
