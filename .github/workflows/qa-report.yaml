@@ -25,11 +25,11 @@ jobs:
         run: npm install -g fsh-sushi
 
     - name: Download other version of publisher
-        if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
-        shell: bash
-        run: |
-            wget -O /input-cache/publisher.jar \
-            https://github.com/HL7/fhir-ig-publisher/releases/download/${{ inputs.IG_PUBLISHER_VERSION }}/publisher.jar
+      if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
+      shell: bash
+      run: |
+          wget -O /input-cache/publisher.jar \
+          https://github.com/HL7/fhir-ig-publisher/releases/download/${{ inputs.IG_PUBLISHER_VERSION }}/publisher.jar
 
     - name: Transpile to prepare for publication
       shell: bash
