@@ -16,15 +16,14 @@ jobs:
     container: ghcr.io/trifork/ig-publisher:1.8.26
   
     steps:
-    - name: Checkout IG Source
-      uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        path: ig
-
-    - uses: actions/setup-python@v5
-      with:
-        python-version: "3.13"
+        python-version: '3.13'
         pip-version: '25.0.1'
+    - name: Display Pip version
+      run: pip --version
 
     - name: Install Beautiful Soup
       run: |
