@@ -6,14 +6,14 @@ on:
       IG_PUBLISHER_VERSION:
         description: With this you can override what version of the publisher should be used
         required: false
-        default: '2.0.9'
+        default: 'NONE'
         type: string
 
 jobs:
   qa-report-status:
     name: "Comments the status of the QA report on the PR"
     runs-on: ubuntu-latest
-    container: ghcr.io/trifork/ig-publisher:1.8.26
+    container: ghcr.io/trifork/ig-publisher:2.0.9
   
     steps:
     - uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
       run: npm install -g fsh-sushi
 
     - name: Download other version of publisher
-      if: 
+      if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
       shell: bash
       run: |
         wget -O /input-cache/publisher.jar \
