@@ -19,7 +19,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ig
-      
+    
+
       - name: Setup Node for linting FSH files with Node
         uses: actions/setup-node@v4
       
