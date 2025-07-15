@@ -20,17 +20,8 @@ jobs:
       with:
         path: ig
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.13'
-
-    - name: Install Beautiful Soup
-      run: |
-        pip install beautifulsoup4 lxml regex pathlib
-
-    - name: Install the latest SUSHI
-      run: npm install -g fsh-sushi
+    - name: Setup python
+      run: python3 -m venv /pythonvenv && /pythonvenv/bin/pip3 install beautifulsoup4 lxml regex pathlib
 
     - name: Download other version of publisher
       if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
@@ -47,13 +38,13 @@ jobs:
     
     - name: Create comment from qa report
       run: |
-        python3 - <<'PY'
+        /pythonvenv/bin/python3 - <<'PY'
         import os, sys
         from bs4 import BeautifulSoup
         import re
         from pathlib import Path
 
-        qa_html_path = "./ig/qa.html"
+        qa_html_path = "/ig/qa.html"
         heading_text = "Reference_REF_Aggregation"
 
         with open(qa_html_path, encoding="utf-8") as f:
