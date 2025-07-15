@@ -32,6 +32,7 @@ jobs:
     - name: Download other version of publisher
       shell: bash
       run: |
+          mkdir /input-cache
           wget -O /input-cache/publisher.jar \
           https://github.com/HL7/fhir-ig-publisher/releases/download/${{ inputs.IG_PUBLISHER_VERSION }}/publisher.jar
 
