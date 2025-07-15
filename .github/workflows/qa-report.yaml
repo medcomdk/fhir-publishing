@@ -79,9 +79,7 @@ jobs:
 
         errors -= ref_aggregation_rows
 
-        comment = print('Errors: ' + str(errors) + ', Warnings: ' + str(warnings) + ', Info: ' + str(info) + ', Broken links: ' + str(broken_links))
-
-        print(comment)
+        comment = 'Errors: ' + str(errors) + ', Warnings: ' + str(warnings) + ', Info: ' + str(info) + ', Broken links: ' + str(broken_links)
 
         with open(os.environ["GITHUB_ENV"], "a") as ghe:
           ghe.write(f"QA_ERRORS={errors}\n")
