@@ -23,7 +23,7 @@ jobs:
 
     - uses: actions/setup-python@v5
       with:
-        python-version: "3.x"
+        python-version: "3.12"
 
     - name: Install Beautiful Soup
       run: |
@@ -129,3 +129,8 @@ jobs:
           } else {
             await github.rest.issues.createComment({ owner, repo, issue_number: prNumber, body });
           }
+
+    - name: Fail workflow if errors in qa report
+      if: env.QA_ERRORS > 0
+      run: |
+        exit 1
