@@ -23,12 +23,12 @@ jobs:
 
     - uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.13"
+        pip-version: '25.0.1'
 
     - name: Install Beautiful Soup
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install beautifulsoup4 lxml regex pathlib
+        pip install beautifulsoup4 lxml regex pathlib
 
     - name: Install the latest SUSHI
       run: npm install -g fsh-sushi
