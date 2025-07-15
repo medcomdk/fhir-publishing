@@ -44,7 +44,7 @@ jobs:
         import re
         from pathlib import Path
 
-        qa_html_path = "/ig/qa.html"
+        qa_html_path = "/ig/output/qa.html"
         heading_text = "Reference_REF_Aggregation"
 
         with open(qa_html_path, encoding="utf-8") as f:
