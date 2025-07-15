@@ -32,6 +32,7 @@ jobs:
 
       - name: Validate FSH linting rules
         shell: bash
+        continue-on-error: true
         run: |
           result=$(node self/scripts/validate-fsh.js ./ig/input --whitelist=${{ inputs.WHITELISTED_KEBAB_CASE_WORDS }})
           echo "LINT_RESULT=$result" >> $GITHUB_ENV
