@@ -81,10 +81,10 @@ jobs:
 
         comment = print('Errors: ' + str(errors) + ', Warnings: ' + str(warnings) + ', Info: ' + str(info) + ', Broken links: ' + str(broken_links))
 
-        with open(os.environ["GITHUB_ENV"], "a") as fh:
-            fh.write(f"QA_ERRORS={errors}\n")
-            fh.write(f"QA_WARNINGS={warnings}\n")
-            fh.write(f"QA_REPORT_RESULT={comment}\n")
+        with open(os.getenv["GITHUB_ENV"], "a") as ghe:
+            ghe.write(f"QA_ERRORS={errors}\n")
+            ghe.write(f"QA_WARNINGS={warnings}\n")
+            ghe.write(f"QA_REPORT_RESULT={comment}\n")
 
         PY
 
