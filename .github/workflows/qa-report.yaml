@@ -16,6 +16,24 @@ jobs:
     container: ghcr.io/medcomdk/medcom-github-actions-container:2.0.9
   
     steps:
+    - name: test
+      run: |
+        /pythonvenv/bin/python3 - <<'PY'
+        import os
+
+        value = "hello‑from‑python"
+
+        with open(os.environ["GITHUB_ENV"], "a") as env_file:
+          env_file.write(f"MY_VAR={value}\n")
+          env_file.write("MY_VAR2=hello from to\n")
+          
+        PY
+
+    - name: tester2
+      shell: bash
+      run: |
+        echo ${{ MY_VAR }} && echo ${{ MY_VAR2 }}
+
     - uses: actions/checkout@v4
       with:
         path: ig
@@ -80,6 +98,8 @@ jobs:
         errors -= ref_aggregation_rows
 
         comment = print('Errors: ' + str(errors) + ', Warnings: ' + str(warnings) + ', Info: ' + str(info) + ', Broken links: ' + str(broken_links))
+
+        print(comment)
 
         with open(os.getenv["GITHUB_ENV"], "a") as ghe:
             ghe.write(f"QA_ERRORS={errors}\n")
