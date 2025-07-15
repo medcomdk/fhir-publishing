@@ -27,8 +27,8 @@ jobs:
 
     - name: Install Beautiful Soup
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install beautifulsoup4 lxml regex pathlib
+        python3 -m pip install --upgrade pip
+        python3 -m pip install beautifulsoup4 lxml regex pathlib
 
     - name: Install the latest SUSHI
       run: npm install -g fsh-sushi
