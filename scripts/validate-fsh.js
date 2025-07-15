@@ -57,7 +57,6 @@ function validateFile(fp, problems) {
     const clean = line.replace(/\/\/.*$/, '').trim();
     if (clean === '') return;
 
-    // new definition?
     const m = clean.match(/^(\w+)\s*:\s*(\S+)/);
     if (m && TARGET_KEYWORDS.includes(m[1])) {
       current = { kind: m[1], name: m[2], id: null, line: idx + 1 };
@@ -72,7 +71,6 @@ function validateFile(fp, problems) {
       return;
     }
 
-    // Id line?
     if (current && current.id === null) {
       const idMatch = clean.match(/^Id\s*:\s*(\S+)/i);
       if (idMatch) {

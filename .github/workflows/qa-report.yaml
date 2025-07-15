@@ -22,7 +22,7 @@ jobs:
         path: ig
 
     - name: Install the latest SUSHI
-        run: npm install -g fsh-sushi
+      run: npm install -g fsh-sushi
 
     - name: Download other version of publisher
       if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
