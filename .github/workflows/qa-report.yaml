@@ -20,8 +20,8 @@ jobs:
       with:
         path: ig
 
-    - name: Setup python
-      run: python3 -m venv /pythonvenv && /pythonvenv/bin/pip3 install beautifulsoup4 lxml regex pathlib
+    - name: Install pip packages
+      run: /pythonvenv/bin/pip3 install beautifulsoup4 lxml regex pathlib
 
     - name: Download other version of publisher
       if: ${{ inputs.IG_PUBLISHER_VERSION != 'NONE' }}
