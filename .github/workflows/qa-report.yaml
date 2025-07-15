@@ -32,7 +32,7 @@ jobs:
     - name: tester2
       shell: bash
       run: |
-        echo ${{ MY_VAR }} && echo ${{ MY_VAR2 }}
+        echo ${{ env.MY_VAR }} && echo ${{ env.MY_VAR2 }}
 
     - uses: actions/checkout@v4
       with:
