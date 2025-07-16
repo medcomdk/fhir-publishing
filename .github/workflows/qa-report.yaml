@@ -110,7 +110,7 @@ jobs:
             : process.env.QA_WARNINGS > 0 ? "⚠️"
               : "✅";
           const canonical = process.env.CANONICAL.replace('.', '-');
-          const buildSite = "https://build.fhir.org/ig/medcomdk/" + canonical + "/branches/" + process.env.BRANCH_NAME; 
+          const buildSite = "🔨 https://build.fhir.org/ig/medcomdk/" + canonical + "/branches/" + process.env.BRANCH_NAME + " 🔨"; 
           const body = titleOfComment + "\n" + buildSite + "\n" + process.env.QA_REPORT_RESULT
 
           const { owner, repo } = context.repo;
