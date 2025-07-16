@@ -102,7 +102,7 @@ jobs:
         QA_ERRORS: ${{ env.QA_ERRORS }}
         QA_WARNINGS: ${{ env.QA_WARNINGS }}
         CANONICAL: ${{ env.IG_NAME }}
-        BRANCH_NAME: ${{ github.ref_name }}
+        BRANCH_NAME: ${{ github.head_ref }}
       with:
         script: |
           const titleOfComment = "## QA Report status"
