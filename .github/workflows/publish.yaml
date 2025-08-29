@@ -16,6 +16,12 @@ on:
         required: false
         default: 'NONE'
         type: string
+      WEBSITE_REPO:
+        description: The name of the github repo that hosts the website
+        required: false
+        default: 'medcomfhir-website'
+        type: string
+
 
     secrets:
       PUBLISHER_APP_PRIVATE_KEY:
@@ -29,7 +35,7 @@ jobs:
 
     env:
       IG_CONTAINER_PATH:                    "ig"
-      WEB_REPO:                             "medcomfhir-website"
+      WEB_REPO:                             ${{ inputs.WEBSITE_REPO }}
       WEB_REPO_CONTAINER_PATH:              "igwebsite"
       REGISTRY_REPO:                        "ig-registry"
       REGISTRY_REPO_CONTAINER_PATH:         "igregistry"
