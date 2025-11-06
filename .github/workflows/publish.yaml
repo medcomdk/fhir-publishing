@@ -56,6 +56,7 @@ jobs:
           url=$(grep '^canonical:' ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml \
                 | sed -e 's/^canonical:[[:space:]]*//')
           IG_NAME=${url##*/}
+          IG_NAME=$(echo -n "$IG_NAME" | tr -d '[:space:]')
           echo "IG_NAME=$IG_NAME" >> $GITHUB_ENV
 
       - name: Set Sushi config release YAML properties
