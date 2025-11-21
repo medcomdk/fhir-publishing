@@ -59,6 +59,20 @@ jobs:
           IG_NAME=$(echo -n "$IG_NAME" | tr -d '[:space:]')
           echo "IG_NAME=$IG_NAME" >> $GITHUB_ENV
 
+      - name: Validate IG source does NOT contain package-list.json
+        shell: bash
+        run: |
+          PL_PATH="${{ env.IG_CONTAINER_PATH }}/package-list.json"
+          IG_SOURCE_NAME="${{ env.IG_NAME }}"
+          echo "Checking for forbidden file: $PL_PATH"
+
+          if [ -f "$PL_PATH" ]; then
+            echo "❌ package-list.json found in (${IG_SOURCE_NAME}) repo (${PL_PATH})"
+            exit 1
+          else
+            echo "✅ No package-list.json found in (${IG_SOURCE_NAME}) repo (${PL_PATH})"
+          fi
+
       - name: Set Sushi config release YAML properties
         uses: fjogeleit/yaml-update-action@v0.16.0
         with:
@@ -161,20 +175,6 @@ jobs:
           repository: ${{ env.IG_HISTORY_REPO }}
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
-
-      - name: Sanity check package-list.json path
-        shell: bash
-        run: |
-          echo "IG_NAME=${IG_NAME}"
-          echo "Listing ${WEB_REPO_CONTAINER_PATH}/ig:"
-          ls -la ${WEB_REPO_CONTAINER_PATH}/ig || true
-          echo "Listing ${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME}:"
-          ls -la ${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME} || true
-          if [ -f "${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME}/package-list.json" ]; then
-            echo "✅ Found ig/${IG_NAME}/package-list.json"
-          else
-            echo "❌ Missing ig/${IG_NAME}/package-list.json"
-          fi
 
       - name: Run the IG Publish process
         shell: bash
