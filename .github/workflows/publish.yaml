@@ -51,14 +51,6 @@ jobs:
         with:
           path: ${{ env.IG_CONTAINER_PATH }}
 
-      - name: Extract IG name from canonical URL
-        run: |
-          url=$(grep '^canonical:' ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml \
-                | sed -e 's/^canonical:[[:space:]]*//')
-          IG_NAME=${url##*/}
-          IG_NAME=$(echo -n "$IG_NAME" | tr -d '[:space:]')
-          echo "IG_NAME=$IG_NAME" >> $GITHUB_ENV
-
       - name: Validate IG source does NOT contain package-list.json
         shell: bash
         run: |
@@ -71,6 +63,14 @@ jobs:
           else
             echo "✅ No package-list.json found in ${IG_SOURCE_NAME} repo"
           fi
+
+      - name: Extract IG name from canonical URL
+        run: |
+          url=$(grep '^canonical:' ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml \
+                | sed -e 's/^canonical:[[:space:]]*//')
+          IG_NAME=${url##*/}
+          IG_NAME=$(echo -n "$IG_NAME" | tr -d '[:space:]')
+          echo "IG_NAME=$IG_NAME" >> $GITHUB_ENV
 
       - name: Set Sushi config release YAML properties
         uses: fjogeleit/yaml-update-action@v0.16.0
