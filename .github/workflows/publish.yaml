@@ -62,15 +62,14 @@ jobs:
       - name: Validate IG source does NOT contain package-list.json
         shell: bash
         run: |
-          PL_PATH="${{ env.IG_CONTAINER_PATH }}/package-list.json"
-          IG_SOURCE_NAME="${{ env.IG_NAME }}"
-          echo "Checking for forbidden file: $PL_PATH"
+          PACKAGE_LIST_PATH="${{ env.IG_CONTAINER_PATH }}/package-list.json"
+          IG_SOURCE_NAME="${{ github.repository }}"
 
-          if [ -f "$PL_PATH" ]; then
-            echo "❌ package-list.json found in (${IG_SOURCE_NAME}) repo (${PL_PATH})"
+          if [ -f "$PACKAGE_LIST_PATH" ]; then
+            echo "❌ package-list.json found in ${IG_SOURCE_NAME} repo"
             exit 1
           else
-            echo "✅ No package-list.json found in (${IG_SOURCE_NAME}) repo (${PL_PATH})"
+            echo "✅ No package-list.json found in ${IG_SOURCE_NAME} repo"
           fi
 
       - name: Set Sushi config release YAML properties
