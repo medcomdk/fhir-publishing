@@ -162,6 +162,20 @@ jobs:
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
 
+      - name: Sanity check package-list.json path
+        shell: bash
+        run: |
+          echo "IG_NAME=${IG_NAME}"
+          echo "Listing ${WEB_REPO_CONTAINER_PATH}/ig:"
+          ls -la ${WEB_REPO_CONTAINER_PATH}/ig || true
+          echo "Listing ${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME}:"
+          ls -la ${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME} || true
+          if [ -f "${WEB_REPO_CONTAINER_PATH}/ig/${IG_NAME}/package-list.json" ]; then
+            echo "✅ Found ig/${IG_NAME}/package-list.json"
+          else
+            echo "❌ Missing ig/${IG_NAME}/package-list.json"
+          fi
+
       - name: Run the IG Publish process
         shell: bash
         run: >-
