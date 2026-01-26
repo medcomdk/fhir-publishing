@@ -205,6 +205,8 @@ jobs:
         run: |
           rm --recursive --force --verbose ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/ig-build-zips
           rm --force ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/publish-counter.json
+          find "${{ env.WEB_REPO_CONTAINER_PATH }}/ig" -type f -iname 'full-ig*.zip' -print -delete
+          find "${{ env.WEB_REPO_CONTAINER_PATH }}/ig" -type d -iname '*comparison*' -prune -print -exec rm -rf {} +
 
       - name: Update IG registry
         if: env.already_present_in_ig_list == 'false'
