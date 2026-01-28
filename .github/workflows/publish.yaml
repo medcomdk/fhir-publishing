@@ -31,7 +31,7 @@ jobs:
   release:
     name: Transpile and publish to the IG release
     runs-on: ubuntu-latest
-    container: ghcr.io/trifork/ig-publisher:2.0.17
+    container: ghcr.io/trifork/ig-publisher:2.0.29
 
     env:
       IG_CONTAINER_PATH:                    "ig"
