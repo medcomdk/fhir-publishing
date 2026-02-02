@@ -13,7 +13,7 @@ jobs:
   qa-report-status:
     name: "Comments the status of the QA report on the PR"
     runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:2.0.9
+    container: ghcr.io/medcomdk/medcom-github-actions-container:2.0.30
   
     steps:
     - uses: actions/checkout@v4
