@@ -47,7 +47,7 @@ jobs:
         id: token
         uses: actions/create-github-app-token@v2
         with:
-          app-id: ${{ secrets.FHIR_PUBLICATION_BOT_APP_ID }}
+          app-id: ${{ inputs.FHIR_PUBLICATION_BOT_APP_ID }}
           private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: ${{ steps.meta.outputs.repo_name }}
