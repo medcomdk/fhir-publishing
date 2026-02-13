@@ -1,0 +1,72 @@
+name: MedCom FHIR website - Create release note in IG repo when merging an IG PR
+
+on:
+  workflow_call:
+    inputs:
+      FHIR_PUBLICATION_BOT_APP_ID:
+        description: The APP ID of the publishing application installed in the MedComDk repo
+        required: true
+        type: string
+
+    secrets:
+      PUBLISHER_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  create_release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'publish-ig-')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Parse PR body for SOURCE_REPO + RELEASE_VERSION
+        id: meta
+        shell: bash
+        run: |
+          body='${{ github.event.pull_request.body }}'
+
+          source_repo=$(printf "%s" "$body" | sed -n 's/^SOURCE_REPO=\(.*\)$/\1/p' | head -n1 | tr -d '\r')
+          release_version=$(printf "%s" "$body" | sed -n 's/^RELEASE_VERSION=\(.*\)$/\1/p' | head -n1 | tr -d '\r')
+
+          if [ -z "$source_repo" ] || [ -z "$release_version" ]; then
+            echo "Missing SOURCE_REPO or RELEASE_VERSION in PR body"
+            exit 1
+          fi
+
+          echo "source_repo=$source_repo" >> "$GITHUB_OUTPUT"
+          echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
+
+      - name: Generate app token
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.FHIR_PUBLICATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: |
+            ${{ steps.meta.outputs.source_repo##*/ }}
+
+      - name: Checkout source repo at tag
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.meta.outputs.source_repo }}
+          ref: ${{ steps.meta.outputs.release_version }}
+          token: ${{ steps.token.outputs.token }}
+          path: source
+
+      - name: Create GitHub release in source repo using release-notes.md
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          SOURCE_REPO: ${{ steps.meta.outputs.source_repo }}
+          TAG: ${{ steps.meta.outputs.release_version }}
+        shell: bash
+        run: |
+          test -f source/release-notes.md || (echo "source/release-notes.md not found" && exit 1)
+
+          gh release create "$TAG" \
+            --repo "$SOURCE_REPO" \
+            --title "IG Release version $TAG" \
+            --notes-file source/release-notes.md
