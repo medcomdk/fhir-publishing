@@ -57,6 +57,7 @@ jobs:
         with:
           repository: ${{ steps.meta.outputs.source_repo }}
           token: ${{ steps.token.outputs.token }}
+          # TODO: If this works, then include the entire tag name in the PR body use that directly here instead of assuming the tag is ig-release/<version>
           ref: ig-release/${{ steps.meta.outputs.release_version }}
           path: source
 
