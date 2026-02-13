@@ -1,4 +1,4 @@
-name: MedCom FHIR website - Create release note in IG repo when merging an IG PR
+name: MedCom automatic release note in IG repo when merging an IG PR
 
 on:
   workflow_call:
@@ -13,7 +13,7 @@ on:
         required: true
 
 jobs:
-  create_release:
+  create_release_note:
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'publish-ig-')
     runs-on: ubuntu-latest
 
@@ -37,6 +37,10 @@ jobs:
           fi
 
           echo "source_repo=$source_repo" >> "$GITHUB_OUTPUT"
+          
+          repo_name="${source_repo##*/}"
+          echo "repo_name=$repo_name" >> "$GITHUB_OUTPUT"
+
           echo "release_version=$release_version" >> "$GITHUB_OUTPUT"
 
       - name: Generate app token
