@@ -30,7 +30,7 @@ jobs:
   release:
     name: Transpile and publish to the IG release
     runs-on: ubuntu-latest
-    container: ghcr.io/trifork/ig-publisher:2.0.30
+    container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11
 
     env:
       IG_CONTAINER_PATH:                    "ig"
