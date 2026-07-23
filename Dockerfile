@@ -8,7 +8,7 @@ RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
         build-essential \
-        openjdk-21-jdk-headless \
+        openjdk-25-jdk-headless \
         nodejs npm \
         python3 python3-pip python3-venv \
         jq yq \
