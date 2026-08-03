@@ -166,10 +166,15 @@ jobs:
           overwrite: true
 
   publish:
-    name: Publish IG release
+    name: Generate IG publication
     needs: prepare
     runs-on: ubuntu-latest
     container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11-with-firely-terminal
+
+    outputs:
+      already_present_in_ig_list: ${{ steps.scan_ig_list.outputs.already_present_in_ig_list }}
+      web_repo_commit: ${{ steps.publication_revisions.outputs.web_repo_commit }}
+      registry_repo_commit: ${{ steps.publication_revisions.outputs.registry_repo_commit }}
 
     env:
       IG_CONTAINER_PATH:                    "ig"
@@ -183,6 +188,7 @@ jobs:
       APP_AUTHOR_EMAIL:                     "fhir@medcom.dk"
       RELEASE_VERSION:                      ${{ inputs.RELEASE_VERSION }}
       IG_NAME:                              ${{ needs.prepare.outputs.ig_name }}
+      PUBLISH_OUTPUT_PATH:                  "published-ig-output"
 
     steps:
       - name: Download prepared IG source
@@ -234,6 +240,15 @@ jobs:
           path: ${{ env.REGISTRY_REPO_CONTAINER_PATH }}
           ref: develop
 
+      - name: Record publication repository revisions
+        id: publication_revisions
+        shell: bash
+        run: |
+          web_repo_commit="$(git -C "${{ env.WEB_REPO_CONTAINER_PATH }}" rev-parse HEAD)"
+          registry_repo_commit="$(git -C "${{ env.REGISTRY_REPO_CONTAINER_PATH }}" rev-parse HEAD)"
+          echo "web_repo_commit=$web_repo_commit" >> "$GITHUB_OUTPUT"
+          echo "registry_repo_commit=$registry_repo_commit" >> "$GITHUB_OUTPUT"
+
       - name: Scan IG registry repo to determine if IG is present
         id: scan_ig_list
         run: |
@@ -241,9 +256,9 @@ jobs:
           if jq -e --arg canon "$CANONICAL" \
                '.guides[] | select(.canonical == $canon)' ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json \
              > /dev/null; then
-            echo "already_present_in_ig_list=true" >> $GITHUB_ENV
+            echo "already_present_in_ig_list=true" >> "$GITHUB_OUTPUT"
           else
-            echo "already_present_in_ig_list=false" >> $GITHUB_ENV
+            echo "already_present_in_ig_list=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Fetch the IG history template repo
@@ -262,7 +277,118 @@ jobs:
           -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
           -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json 
           -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
-      
+
+      - name: Stage published IG output
+        shell: bash
+        run: |
+          mkdir -p "${{ env.PUBLISH_OUTPUT_PATH }}"
+          cp -a "${{ env.WEB_REPO_CONTAINER_PATH }}/ig" \
+            "${{ env.PUBLISH_OUTPUT_PATH }}/website-ig"
+          cp "${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json" \
+            "${{ env.PUBLISH_OUTPUT_PATH }}/fhir-ig-list.json"
+
+      - name: Upload published IG output
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-ig-output
+          path: ${{ env.PUBLISH_OUTPUT_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+          include-hidden-files: true
+
+  post-publish:
+    name: Finalize IG publication
+    needs: [prepare, publish]
+    runs-on: ubuntu-latest
+    container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11-with-firely-terminal
+
+    env:
+      IG_CONTAINER_PATH:                    "ig"
+      WEB_REPO:                             ${{ inputs.WEBSITE_REPO }}
+      WEB_REPO_CONTAINER_PATH:              "igwebsite"
+      REGISTRY_REPO:                        "ig-registry"
+      REGISTRY_REPO_CONTAINER_PATH:         "igregistry"
+      IG_HISTORY_REPO:                      "HL7/fhir-ig-history-template"
+      IG_HISTORY_TEMPLATE_CONTAINER_PATH:   "ighistorytemplate"
+      APP_AUTHOR_NAME:                      ${{ github.triggering_actor }}
+      APP_AUTHOR_EMAIL:                     "fhir@medcom.dk"
+      RELEASE_VERSION:                      ${{ inputs.RELEASE_VERSION }}
+      IG_NAME:                              ${{ needs.prepare.outputs.ig_name }}
+      PUBLISH_OUTPUT_PATH:                  "published-ig-output"
+      ALREADY_PRESENT_IN_IG_LIST:           ${{ needs.publish.outputs.already_present_in_ig_list }}
+      WEB_REPO_COMMIT:                      ${{ needs.publish.outputs.web_repo_commit }}
+      REGISTRY_REPO_COMMIT:                 ${{ needs.publish.outputs.registry_repo_commit }}
+
+    steps:
+      - name: Download prepared IG source
+        uses: actions/download-artifact@v4
+        with:
+          name: prepared-ig
+          path: ${{ env.IG_CONTAINER_PATH }}
+
+      - name: Generate app token
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ inputs.FHIR_PUBLICATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: "${{ env.WEB_REPO }},${{ env.REGISTRY_REPO }}"
+
+      - name: Fetch the IG website repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ env.WEB_REPO }}
+          token: ${{ steps.token.outputs.token }}
+          path: ${{ env.WEB_REPO_CONTAINER_PATH }}
+          ref: ${{ env.WEB_REPO_COMMIT }}
+
+          fetch-depth: 0
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            ig/index.md
+            ig/dark-medcom-logo.png
+            ig/package-feed.xml
+            ig/package-registry.json
+            ig/publication-feed.xml
+            ig/publish-counter.json
+            ig/publish-setup.json
+            ig/publish.ini
+            ig/${{ env.IG_NAME }}/**
+            ig/templates/**
+
+      - name: Fetch the IG registry repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/${{ env.REGISTRY_REPO }}
+          token: ${{ steps.token.outputs.token }}
+          path: ${{ env.REGISTRY_REPO_CONTAINER_PATH }}
+          ref: ${{ env.REGISTRY_REPO_COMMIT }}
+          fetch-depth: 0
+
+      - name: Download published IG output
+        uses: actions/download-artifact@v4
+        with:
+          name: published-ig-output
+          path: ${{ env.PUBLISH_OUTPUT_PATH }}
+
+      - name: Restore published IG output
+        shell: bash
+        run: |
+          rm -rf "${{ env.WEB_REPO_CONTAINER_PATH }}/ig"
+          cp -a "${{ env.PUBLISH_OUTPUT_PATH }}/website-ig" \
+            "${{ env.WEB_REPO_CONTAINER_PATH }}/ig"
+          cp "${{ env.PUBLISH_OUTPUT_PATH }}/fhir-ig-list.json" \
+            "${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json"
+
+      - name: Fetch the IG history template repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.IG_HISTORY_REPO }}
+          token: ${{ steps.token.outputs.token }}
+          path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
+
       - name: Add history template files if not present
         shell: bash
         env:
@@ -287,7 +413,7 @@ jobs:
           find "${{ env.WEB_REPO_CONTAINER_PATH }}/ig" -type d -iname '*comparison*' -prune -print -exec rm -rf {} +
 
       - name: Update IG registry
-        if: env.already_present_in_ig_list == 'false'
+        if: env.ALREADY_PRESENT_IN_IG_LIST == 'false'
         shell: bash
         run: |
           export DESCRIPTION=$(yq -r .description ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml)
