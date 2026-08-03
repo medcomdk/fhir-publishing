@@ -27,22 +27,13 @@ on:
         required: true
 
 jobs:
-  release:
-    name: Transpile and publish to the IG release
+  validate:
+    name: Validate IG source
     runs-on: ubuntu-latest
     container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11-with-firely-terminal
 
     env:
-      IG_CONTAINER_PATH:                    "ig"
-      WEB_REPO:                             ${{ inputs.WEBSITE_REPO }}
-      WEB_REPO_CONTAINER_PATH:              "igwebsite"
-      REGISTRY_REPO:                        "ig-registry"
-      REGISTRY_REPO_CONTAINER_PATH:         "igregistry"
-      IG_HISTORY_REPO:                      "HL7/fhir-ig-history-template"
-      IG_HISTORY_TEMPLATE_CONTAINER_PATH:   "ighistorytemplate"
-      APP_AUTHOR_NAME:                      ${{ github.triggering_actor }}
-      APP_AUTHOR_EMAIL:                     "fhir@medcom.dk"
-      RELEASE_VERSION:                      ${{ inputs.RELEASE_VERSION }}
+      IG_CONTAINER_PATH: "ig"
 
     steps:
       - name: Checkout IG Source
@@ -79,13 +70,43 @@ jobs:
             echo "✅ No package-list.json found in ${IG_SOURCE_NAME} repo"
           fi
 
+      - name: Upload validated IG source
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-ig
+          path: ${{ env.IG_CONTAINER_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  prepare:
+    name: Prepare IG release
+    needs: validate
+    runs-on: ubuntu-latest
+    container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11-with-firely-terminal
+
+    outputs:
+      ig_name: ${{ steps.ig_metadata.outputs.ig_name }}
+
+    env:
+      IG_CONTAINER_PATH: "ig"
+      RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
+
+    steps:
+      - name: Download validated IG source
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-ig
+          path: ${{ env.IG_CONTAINER_PATH }}
+
       - name: Extract IG name from canonical URL
+        id: ig_metadata
         run: |
           url=$(grep '^canonical:' ${{ env.IG_CONTAINER_PATH }}/sushi-config.yaml \
                 | sed -e 's/^canonical:[[:space:]]*//')
           IG_NAME=${url##*/}
           IG_NAME=$(echo -n "$IG_NAME" | tr -d '[:space:]')
-          echo "IG_NAME=$IG_NAME" >> $GITHUB_ENV
+          echo "ig_name=$IG_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Set Sushi config release YAML properties
         uses: fjogeleit/yaml-update-action@v0.16.0
@@ -124,6 +145,41 @@ jobs:
         shell: bash
         working-directory: ${{ env.IG_CONTAINER_PATH }}
         run: java -jar /input-cache/publisher.jar .
+
+      - name: Upload prepared IG source
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepared-ig
+          path: ${{ env.IG_CONTAINER_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+
+  publish:
+    name: Publish IG release
+    needs: prepare
+    runs-on: ubuntu-latest
+    container: ghcr.io/medcomdk/medcom-github-actions-container:2.2.11-with-firely-terminal
+
+    env:
+      IG_CONTAINER_PATH:                    "ig"
+      WEB_REPO:                             ${{ inputs.WEBSITE_REPO }}
+      WEB_REPO_CONTAINER_PATH:              "igwebsite"
+      REGISTRY_REPO:                        "ig-registry"
+      REGISTRY_REPO_CONTAINER_PATH:         "igregistry"
+      IG_HISTORY_REPO:                      "HL7/fhir-ig-history-template"
+      IG_HISTORY_TEMPLATE_CONTAINER_PATH:   "ighistorytemplate"
+      APP_AUTHOR_NAME:                      ${{ github.triggering_actor }}
+      APP_AUTHOR_EMAIL:                     "fhir@medcom.dk"
+      RELEASE_VERSION:                      ${{ inputs.RELEASE_VERSION }}
+      IG_NAME:                              ${{ needs.prepare.outputs.ig_name }}
+
+    steps:
+      - name: Download prepared IG source
+        uses: actions/download-artifact@v4
+        with:
+          name: prepared-ig
+          path: ${{ env.IG_CONTAINER_PATH }}
 
       - name: Generate app token
         id: token

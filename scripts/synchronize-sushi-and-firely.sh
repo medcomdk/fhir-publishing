@@ -109,4 +109,11 @@ output_tmp=""
 succeeded=true
 
 printf 'Created %s from %s.\n' "$PACKAGE_FILE" "$CONFIG_FILE"
-fhir restore
+printf 'Restoring Firely packages...\n'
+if fhir restore; then
+  printf 'Firely package restore completed.\n'
+else
+  restore_status=$?
+  printf 'Warning: Firely package restore exited with status %d;\n' \
+    "$restore_status" >&2
+fi
