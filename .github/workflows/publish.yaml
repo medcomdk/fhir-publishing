@@ -34,24 +34,34 @@ jobs:
 
     env:
       IG_CONTAINER_PATH: "ig"
+      PUBLISHING_TOOLS_PATH: "fhir-publishing-tools"
 
     steps:
       - name: Checkout IG Source
         uses: actions/checkout@v4
         with:
           path: ${{ env.IG_CONTAINER_PATH }}
-      
+
+      - name: Checkout current publishing helpers
+        uses: actions/checkout@v4
+        with:
+          repository: medcomdk/fhir-publishing
+          ref: main
+          path: ${{ env.PUBLISHING_TOOLS_PATH }}
+          sparse-checkout: scripts
+
       - name: Prepare Firely Terminal Setup
         shell: bash
-        run: cd ${{ env.IG_CONTAINER_PATH }} && synchronize-sushi-and-firely
+        working-directory: ${{ env.IG_CONTAINER_PATH }}
+        run: bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/synchronize-sushi-and-firely.sh"
 
       - name: Validate IG instances with Firely Terminal
         shell: bash
+        working-directory: ${{ env.IG_CONTAINER_PATH }}
         run: |
-          cd ${{ env.IG_CONTAINER_PATH }}
           sushi .
 
-          validate-all-resources-with-firely
+          bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/validate-all-resources-with-firely.sh"
 
       - name: Clean up after Firely Terminal Setup
         shell: bash

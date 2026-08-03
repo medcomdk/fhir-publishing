@@ -2,8 +2,6 @@ ARG DEBIAN_FRONTEND=noninteractive
 FROM ubuntu:24.04
 LABEL maintainer="Oliver Winther"
 
-COPY --chmod=755 scripts/synchronize-sushi-and-firely.sh /usr/local/bin/synchronize-sushi-and-firely
-
 RUN apt-get update \
  && apt-get upgrade -y \
  && apt-get install -y --no-install-recommends \
@@ -34,8 +32,6 @@ ENV PATH="/root/.dotnet/tools:${PATH}"
 
 # Setup python virtual environment
 RUN python3 -m venv /pythonvenv
-
-COPY --chmod=755 scripts/validate-all-resources-with-firely.sh /usr/local/bin/validate-all-resources-with-firely
 
 # Pre-download the IG Publisher JAR
 ARG IG_PUB_VERSION # Provided by github workflow
