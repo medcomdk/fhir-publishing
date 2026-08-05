@@ -40,9 +40,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Docker image
-        run: |
-          docker build \
-            -t ghcr.io/medcomdk/medcom-github-actions-container:${LATEST_RELEASE}-with-firely-terminal \
-            --build-arg IG_PUB_VERSION=${LATEST_RELEASE} \
-            .
+      
+      - name: Build & push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          push: true
+          build-args: |
+            IG_PUB_VERSION=${{ env.LATEST_RELEASE }}
+          tags: ghcr.io/medcomdk/medcom-github-actions-container:${{ env.LATEST_RELEASE }}-with-firely-terminal
+          
