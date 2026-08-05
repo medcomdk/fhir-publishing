@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Get latest HL7 release
         run: |
           LATEST_RELEASE=$(
@@ -22,4 +24,13 @@ jobs:
           )
 
           echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
-          echo "$LATEST_RELEASE"
+
+      - name: Print latest release
+        run: |
+          echo "Latest release: $LATEST_RELEASE"
+      - name: Build Docker image 
+        run: |
+          docker build \
+            -t ghcr.io/medcomdk/medcom-github-actions-container:${LATEST_RELEASE}-with-firely-terminal \
+            --build-arg IG_PUB_VERSION=${LATEST_RELEASE} \
+            .
