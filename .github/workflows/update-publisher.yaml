@@ -49,3 +49,13 @@ jobs:
             IG_PUB_VERSION=${{ env.LATEST_RELEASE }}
           tags: ghcr.io/medcomdk/medcom-github-actions-container:${{ env.LATEST_RELEASE }}-with-firely-terminal
           
+      - name: Update qa-report.yaml with latest publisher version
+        run: |
+          echo "Updating qa-report.yaml with latest publisher version: ${LATEST_RELEASE}-with-firely-terminal"
+          sed -i -E \
+            "s|(container:[[:space:]]+[^[:space:]]+):[^[:space:]]+|\1:${LATEST_RELEASE}-with-firely-terminal|" \
+            ./.github/workflows/qa-report.yaml
+
+      - name: Verify qa-report.yaml
+        run: |
+          grep "container:" ./.github/workflows/qa-report.yaml
