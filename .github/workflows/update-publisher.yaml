@@ -11,10 +11,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Get latest HL7 release
         run: |
-          curl -sL \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2026-03-10" \
-            https://api.github.com/repos/HL7/fhir-ig-publisher/releases/latest \
-            | jq -r .tag_name
+          LATEST_RELEASE=$(
+            curl -sL \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2026-03-10" \
+              https://api.github.com/repos/HL7/fhir-ig-publisher/releases/latest \
+              | jq -r .tag_name
+          )
+
+          echo "LATEST_RELEASE=$LATEST_RELEASE" >> $GITHUB_ENV
+
+      - name: Print latest release
+        run: |
+          echo "Latest release: $LATEST_RELEASE"
+      - name: Build Docker image 
+        run: |
+          docker build \
+            -t ghcr.io/medcomdk/medcom-github-actions-container:${LATEST_RELEASE}-with-firely-terminal \
+            --build-arg IG_PUB_VERSION=${LATEST_RELEASE} \
+            .
