@@ -46,3 +46,7 @@ jobs:
             -t ghcr.io/medcomdk/medcom-github-actions-container:${LATEST_RELEASE}-with-firely-terminal \
             --build-arg IG_PUB_VERSION=${LATEST_RELEASE} \
             .
+          
+      - name: Push Docker image
+        run: |
+          docker push ghcr.io/medcomdk/medcom-github-actions-container:${LATEST_RELEASE}-with-firely-terminal
