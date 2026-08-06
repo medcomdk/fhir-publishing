@@ -60,12 +60,6 @@ jobs:
             echo "SKIP_UPDATE=false" >> $GITHUB_ENV
             echo "New version found. Continuing."
           fi
-
-      - name: Debug variables
-        run: |
-          echo "LATEST_RELEASE=$LATEST_RELEASE"
-          echo "CURRENT_VERSION=$CURRENT_VERSION"
-          echo "SKIP_UPDATE=$SKIP_UPDATE"
            
       - name: Build & push Docker image
         if: env.SKIP_UPDATE != 'true'
