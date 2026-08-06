@@ -31,6 +31,12 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: fhir-publishing
 
+      - name: Verify GitHub App identity
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          gh api /user
+
       - name: Get latest HL7 release
         run: |
           LATEST_RELEASE=$(
