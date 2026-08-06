@@ -31,12 +31,6 @@ jobs:
           owner: ${{ github.repository_owner }}
           repositories: fhir-publishing
 
-      - name: Verify GitHub App identity
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-        run: |
-          gh api /user
-
       - name: Get latest HL7 release
         run: |
           LATEST_RELEASE=$(
@@ -102,18 +96,19 @@ jobs:
         run: |
           grep "container:" ./.github/workflows/qa-report.yaml
 
-      - name: Updating publish.yaml with latest publisher version
-        if: env.SKIP_UPDATE != 'true'
-        run: |
-          echo "Updating publish.yaml with latest publisher version: ${LATEST_RELEASE}-with-firely-terminal"
-          sed -i -E \
-            "s|(container:[[:space:]]+[^[:space:]]+):[^[:space:]]+|\1:${LATEST_RELEASE}-with-firely-terminal|" \
-            ./.github/workflows/publish.yaml
+      # TEMPORARILY DISABLED FOR DEBUGGING
+      # - name: Updating publish.yaml with latest publisher version
+      #   if: env.SKIP_UPDATE != 'true'
+      #   run: |
+      #     echo "Updating publish.yaml with latest publisher version: ${LATEST_RELEASE}-with-firely-terminal"
+      #     sed -i -E \
+      #       "s|(container:[[:space:]]+[^[:space:]]+):[^[:space:]]+|\1:${LATEST_RELEASE}-with-firely-terminal|" \
+      #       ./.github/workflows/publish.yaml
 
-      - name: Verify publish.yaml
-        if: env.SKIP_UPDATE != 'true'
-        run: |
-          grep "container:" ./.github/workflows/publish.yaml
+      # - name: Verify publish.yaml
+      #   if: env.SKIP_UPDATE != 'true'
+      #   run: |
+      #     grep "container:" ./.github/workflows/publish.yaml
 
       - name: Configure Git
         run: |
@@ -133,4 +128,3 @@ jobs:
 
             Publisher version: ${{ env.LATEST_RELEASE }}-with-firely-terminal
           base: main
-       
