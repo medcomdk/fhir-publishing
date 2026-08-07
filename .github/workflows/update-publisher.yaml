@@ -36,7 +36,6 @@ jobs:
           LATEST_RELEASE=$(
             curl -sL \
               -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2026-03-10" \
               https://api.github.com/repos/HL7/fhir-ig-publisher/releases/latest \
               | jq -r .tag_name
           )
@@ -57,7 +56,7 @@ jobs:
       - name: Get current container version
         id: get_current_version
         run: |
-          CURRENT_VERSION=$(grep "container:" .github/workflows/qa-report.yaml | sed -E 's|.*:([0-9]+\.[0-9]+\.[0-9]+)-with-firely-terminal|\1|')
+          CURRENT_VERSION=$(grep "container:" .github/workflows/qa-report.yaml | sed -E 's|.*:([0-9]+\.[0-9]+\.[0-9]+).*|\1|')
           echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
 
       - name: Compare versions
