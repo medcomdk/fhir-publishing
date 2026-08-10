@@ -2,7 +2,7 @@ name: Update Publisher
 
 on:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 8 * * *'
 
   workflow_dispatch:
 
@@ -12,24 +12,15 @@ permissions:
   packages: write
 
 jobs:
-  update-publisher:
+  check-version:
     runs-on: ubuntu-latest
 
-    env:
-      APP_AUTHOR_NAME: ${{ github.triggering_actor }}
-      APP_AUTHOR_EMAIL: "fhir@medcom.dk"
+    outputs:
+      has_update: ${{ steps.compare_versions.outputs.has_update }}
+      latest_release: ${{ steps.compare_versions.outputs.latest_release }}
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Generate app token
-        id: token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.FHIR_PUBLICATION_BOT_APP_ID }}
-          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: fhir-publishing
 
       - name: Get latest HL7 release
         run: |
@@ -46,13 +37,6 @@ jobs:
         run: |
           echo "Latest release: $LATEST_RELEASE"
 
-      - name: Login to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Get current container version
         id: get_current_version
         run: |
@@ -65,16 +49,46 @@ jobs:
           echo "Latest:  $LATEST_RELEASE"
           echo "Current: $CURRENT_VERSION"
 
+          echo "latest_release=$LATEST_RELEASE" >> "$GITHUB_OUTPUT"
+
           if [ "$LATEST_RELEASE" = "$CURRENT_VERSION" ]; then
-            echo "SKIP_UPDATE=true" >> $GITHUB_ENV
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
             echo "Versions are identical. Skipping update."
           else
-            echo "SKIP_UPDATE=false" >> $GITHUB_ENV
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
             echo "New version found. Continuing."
           fi
 
+  update-publisher:
+    needs: check-version
+    if: needs.check-version.outputs.has_update == 'true'
+    runs-on: ubuntu-latest
+
+    env:
+      LATEST_RELEASE: ${{ needs.check-version.outputs.latest_release }}
+      APP_AUTHOR_NAME: ${{ github.triggering_actor }}
+      APP_AUTHOR_EMAIL: "fhir@medcom.dk"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate app token
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.FHIR_PUBLICATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: fhir-publishing
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build & push Docker image
-        if: env.SKIP_UPDATE != 'true'
         uses: docker/build-push-action@v5
         with:
           push: true
@@ -82,10 +96,7 @@ jobs:
             IG_PUB_VERSION=${{ env.LATEST_RELEASE }}
           tags: ghcr.io/medcomdk/medcom-github-actions-container:${{ env.LATEST_RELEASE }}
 
-
-      
       - name: Update qa-report.yaml workflow with latest publisher version
-        if: env.SKIP_UPDATE != 'true'
         run: |
           echo "Updating qa-report.yaml with latest publisher version: ${LATEST_RELEASE}"
           sed -i -E \
@@ -93,12 +104,10 @@ jobs:
             ./.github/workflows/qa-report.yaml
 
       - name: Verify qa-report.yaml update
-        if: env.SKIP_UPDATE != 'true'
         run: |
           grep -q "container:.*${LATEST_RELEASE}" ./.github/workflows/qa-report.yaml
-        
+
       - name: Update publish.yaml workflow with latest publisher version
-        if: env.SKIP_UPDATE != 'true'
         run: |
           echo "Updating publish.yaml with latest publisher version: ${LATEST_RELEASE}"
           sed -i -E \
@@ -106,7 +115,6 @@ jobs:
             ./.github/workflows/publish.yaml
 
       - name: Verify publish.yaml update
-        if: env.SKIP_UPDATE != 'true'
         run: |
           grep -q "container:.*${LATEST_RELEASE}" ./.github/workflows/publish.yaml
 
@@ -116,7 +124,6 @@ jobs:
           git config --global user.email "${{ env.APP_AUTHOR_EMAIL }}"
 
       - name: Create Pull Request
-        if: env.SKIP_UPDATE != 'true'
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ steps.token.outputs.token }}
