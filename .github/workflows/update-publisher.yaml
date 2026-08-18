@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
 
     outputs:
-      has_update: ${{ steps.compare_versions.outputs.has_update }}
+      has_update: ${{ steps.compare_versions.outputs.has_update == 'true' && steps.check_pr.outputs.existing_pr != 'true' }}
       latest_release: ${{ steps.compare_versions.outputs.latest_release }}
 
     steps:
@@ -58,6 +58,27 @@ jobs:
             echo "has_update=true" >> "$GITHUB_OUTPUT"
             echo "New version found. Continuing."
           fi
+
+
+      - name: Check for existing pull request 
+        id: check_pr
+        if: steps.compare_versions.outputs.has_update == 'true'
+        env: 
+            GH_TOKEN: ${{ github.token }}
+        run: |
+              PR_COUNT=$(gh pr list \
+                --state open \
+                --search "Update publisher to $LATEST_RELEASE" \
+                --json number \
+                --jq 'length')
+              echo "Existing PRs: $PR_COUNT" 
+              if [ "$PR_COUNT" -gt 0 ]; then
+                echo "An open PR already exists."
+                echo "existing_pr=true" >> $GITHUB_OUTPUT
+              else
+                echo "No open PR exists."
+                echo "existing_pr=false" >> "$GITHUB_OUTPUT"
+              fi
 
   update-publisher:
     needs: check-version
