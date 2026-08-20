@@ -268,15 +268,18 @@ jobs:
           token: ${{ steps.token.outputs.token }}
           path: ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
 
+      - name: Update SUSHI
+        shell: bash
+        run: npm install -g fsh-sushi
+
       - name: Run the IG Publish process
         shell: bash
-        run: |
-          npm install -g fsh-sushi && 
+        run: >-
           java -jar /input-cache/publisher.jar -go-publish
           -source ${{ env.IG_CONTAINER_PATH }}
           -web ${{ env.WEB_REPO_CONTAINER_PATH }}/ig
           -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
-          -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json 
+          -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
           -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
 
       - name: Stage published IG output
