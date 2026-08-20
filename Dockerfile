@@ -24,7 +24,6 @@ RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
 RUN gem install --no-document bundler jekyll
 
 # FHIR tooling
-RUN npm install -g fsh-sushi
 RUN dotnet tool install -g firely.terminal
 
 # Make .NET global tools available in every container process and shell.

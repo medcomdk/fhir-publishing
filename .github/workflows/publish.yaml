@@ -270,7 +270,8 @@ jobs:
 
       - name: Run the IG Publish process
         shell: bash
-        run: >-
+        run: |
+          npm install -g fsh-sushi && 
           java -jar /input-cache/publisher.jar -go-publish
           -source ${{ env.IG_CONTAINER_PATH }}
           -web ${{ env.WEB_REPO_CONTAINER_PATH }}/ig
