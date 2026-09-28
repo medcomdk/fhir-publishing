@@ -7,6 +7,11 @@ on:
         description: The tag you pushed, e.g. “1.2.3”
         required: true
         type: string
+      ALLOW_VALIDATION_FAILURE:
+        description: Continue publishing if Firely instance validation fails
+        required: false
+        default: false
+        type: boolean
       FHIR_PUBLICATION_BOT_APP_ID:
         description: The APP ID of the publishing application installed in the MedComDk repo
         required: true
@@ -56,12 +61,21 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/synchronize-sushi-and-firely.sh"
 
       - name: Validate IG instances with Firely Terminal
+        id: firely_validation
+        continue-on-error: ${{ inputs.ALLOW_VALIDATION_FAILURE }}
         shell: bash
         working-directory: ${{ env.IG_CONTAINER_PATH }}
         run: |
           sushi .
 
           bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/validate-all-resources-with-firely.sh"
+
+      - name: Report overridden validation failure
+        if: ${{ inputs.ALLOW_VALIDATION_FAILURE && steps.firely_validation.outcome == 'failure' }}
+        shell: bash
+        run: |
+          echo "::warning::The validation step failed. Publishing continues because ALLOW_VALIDATION_FAILURE is enabled."
+          echo "The validation step failed and was explicitly overridden with ALLOW_VALIDATION_FAILURE. See the validation logs for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean up after Firely Terminal Setup
         shell: bash

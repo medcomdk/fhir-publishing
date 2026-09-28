@@ -1,4 +1,15 @@
 on:
+  workflow_dispatch:
+    inputs:
+      RELEASE_VERSION:
+        description: Release version to publish from the selected workflow ref (e.g. 1.2.3)
+        required: true
+        type: string
+      ALLOW_VALIDATION_FAILURE:
+        description: Continue publishing if Firely instance validation fails
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - 'ig-release/*'
@@ -10,13 +21,23 @@ jobs:
       version: ${{ steps.extract.outputs.version }}
     steps:
       - id: extract
-        run: echo "version=${GITHUB_REF_NAME##*/}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
+        run: |
+          version="${RELEASE_VERSION:-${GITHUB_REF_NAME##*/}}"
+          if [[ ! "$version" =~ ^[^/[:space:]]+$ ]]; then
+            echo "::error::Expected a non-empty release version without slashes or whitespace"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: get-version
     uses: medcomdk/fhir-publishing/.github/workflows/publish.yaml@main
     with:
       RELEASE_VERSION:               ${{ needs.get-version.outputs.version }}
+      ALLOW_VALIDATION_FAILURE:      ${{ inputs.ALLOW_VALIDATION_FAILURE || false }}
       FHIR_PUBLICATION_BOT_APP_ID:   ${{ vars.FHIR_PUBLICATION_BOT_APP_ID }}
     secrets:
       PUBLISHER_APP_PRIVATE_KEY:     ${{ secrets.PUBLISHER_APP_PRIVATE_KEY }}
