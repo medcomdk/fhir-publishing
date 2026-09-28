@@ -1,0 +1,7 @@
+id: example.firely-validator
+canonical: http://example.org/firely-validator
+name: FirelyValidatorTest
+status: draft
+version: 0.1.0
+fhirVersion: 4.0.1
+FSHOnly: true

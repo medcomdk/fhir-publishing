@@ -1,0 +1,89 @@
+{
+  "name": "fhir-ig-firely-validator",
+  "displayName": "MedCom Firely Validation",
+  "description": "Build a SUSHI implementation guide and validate its generated Bundles with Firely Terminal.",
+  "icon": "fire-in-pizza-oven_1.jpg",
+  "version": "1.0.2",
+  "publisher": "MedComPublisher",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/medcomdk/fhir-publishing.git",
+    "directory": "firely-validation-vscode-extension"
+  },
+  "engines": {
+    "vscode": "^1.85.0",
+    "node": ">=22"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "FHIR",
+    "SUSHI",
+    "Firely",
+    "validation"
+  ],
+  "main": "./src/extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Validation runs SUSHI and Firely Terminal in the implementation guide directory."
+    },
+    "virtualWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "fhirIg.validate",
+        "title": "MedCom Firely Validation: Build and Validate",
+        "enablement": "isWorkspaceTrusted"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "fhirIg.validate",
+          "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MedCom Firely Validation",
+      "properties": {
+        "fhirIg.firelyPath": {
+          "type": "string",
+          "default": "fhir",
+          "scope": "machine-overridable",
+          "description": "Firely Terminal executable name or absolute path (without arguments)."
+        },
+        "fhirIg.sushiPath": {
+          "type": "string",
+          "default": "sushi",
+          "scope": "machine-overridable",
+          "description": "SUSHI executable name or absolute path (without arguments)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:integration": "node test/integration.js",
+    "prepackage": "node scripts/check-node.js",
+    "package": "vsce package --skip-license"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "jsonc-parser": "^3.3.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.9.2"
+  }
+}
