@@ -2,6 +2,7 @@
 
 is_conformance_resource() {
     case "$1" in
+        ActorDefinition|\
         StructureDefinition|\
         ValueSet|\
         CodeSystem|\
