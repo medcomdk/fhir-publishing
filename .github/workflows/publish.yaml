@@ -35,7 +35,7 @@ jobs:
   validate:
     name: Validate IG source
     runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:2.3.4
+    container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
 
     env:
       IG_CONTAINER_PATH: "ig"
@@ -107,7 +107,7 @@ jobs:
     name: Prepare IG release
     needs: validate
     runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:2.3.4
+    container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
 
     outputs:
       ig_name: ${{ steps.ig_metadata.outputs.ig_name }}
@@ -183,7 +183,7 @@ jobs:
     name: Generate IG publication
     needs: prepare
     runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:2.3.4
+    container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
 
     outputs:
       already_present_in_ig_list: ${{ steps.scan_ig_list.outputs.already_present_in_ig_list }}
@@ -319,7 +319,7 @@ jobs:
     name: Finalize IG publication
     needs: [prepare, publish]
     runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:2.3.4
+    container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
 
     env:
       IG_CONTAINER_PATH:                    "ig"
