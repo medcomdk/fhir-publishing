@@ -25,7 +25,8 @@ test('has a native Windows installer for the same validation tools', async () =>
   assert.match(script, /latest-v24\.x/);
 });
 
-test('setup exits without installing when every tool is available', async (t) => {
+for (const sdkOnly of [false, true]) {
+test(`setup exits without installing when every tool is available (SDK only: ${sdkOnly})`, async (t) => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'firely setup '));
   t.after(() => fs.rm(home, { recursive: true, force: true }));
   const bin = path.join(home, 'test-bin');
@@ -34,12 +35,13 @@ test('setup exits without installing when every tool is available', async (t) =>
   for (const tool of ['dotnet', 'fhir', 'npm', 'sushi']) {
     const body = tool === 'dotnet'
       ? '#!/usr/bin/env bash\n[ "${1:-}" = --list-sdks ] && echo "8.0.418 [/dotnet/sdk]"\n'
+      : tool === 'fhir' && sdkOnly ? '#!/usr/bin/env bash\nexit 99\n'
       : `#!/usr/bin/env bash\necho "${tool} test version"\n`;
     await fs.writeFile(path.join(bin, tool), body, { mode: 0o755 });
   }
 
   const script = path.join(__dirname, '..', 'install-tools.sh');
-  const { stdout } = await execute('bash', [script], {
+  const { stdout } = await execute('bash', [script, process.execPath, ...(sdkOnly ? ['--sdk-only'] : [])], {
     env: {
       ...process.env,
       HOME: home,
@@ -51,3 +53,4 @@ test('setup exits without installing when every tool is available', async (t) =>
   assert.match(stdout, /Firely validation tools are ready/);
   assert.doesNotMatch(stdout, /Installing/);
 });
+}

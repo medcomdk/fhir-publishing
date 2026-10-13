@@ -1,9 +1,9 @@
 {
   "name": "fhir-ig-firely-validator",
   "displayName": "MedCom Firely Validation",
-  "description": "Build a SUSHI implementation guide and validate its generated Bundles with Firely Terminal.",
+  "description": "Quick Firely Terminal validation or Firely .NET SDK validation with an optional _genonce.sh rebuild.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {
@@ -31,7 +31,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Validation runs SUSHI and Firely Terminal in the implementation guide directory."
+      "description": "Validation runs SUSHI, Firely Terminal, IG Publisher, and the Firely .NET SDK in the implementation guide directory."
     },
     "virtualWorkspaces": {
       "supported": false
@@ -43,6 +43,11 @@
         "command": "fhirIg.validate",
         "title": "MedCom Firely Validation: Build and Validate",
         "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "fhirIg.validateSdk",
+        "title": "MedCom Firely Validation: Validate with SDK",
+        "enablement": "isWorkspaceTrusted"
       }
     ],
     "menus": {
@@ -51,23 +56,40 @@
           "command": "fhirIg.validate",
           "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
           "group": "navigation"
+        },
+        {
+          "command": "fhirIg.validateSdk",
+          "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
+          "group": "navigation"
         }
       ]
     },
     "configuration": {
       "title": "MedCom Firely Validation",
       "properties": {
-        "fhirIg.firelyPath": {
-          "type": "string",
-          "default": "fhir",
-          "scope": "machine-overridable",
-          "description": "Firely Terminal executable name or absolute path (without arguments)."
-        },
         "fhirIg.sushiPath": {
           "type": "string",
           "default": "sushi",
           "scope": "machine-overridable",
           "description": "SUSHI executable name or absolute path (without arguments)."
+        },
+        "fhirIg.dotnetPath": {
+          "type": "string",
+          "default": "dotnet",
+          "scope": "machine-overridable",
+          "description": ".NET SDK executable name or absolute path (without arguments)."
+        },
+        "fhirIg.terminologyServer": {
+          "type": "string",
+          "default": "https://tx.hl7europe.eu/r4",
+          "scope": "resource",
+          "description": "FHIR R4 terminology server used when local terminology cannot validate a code."
+        },
+        "fhirIg.firelyPath": {
+          "type": "string",
+          "default": "fhir",
+          "scope": "machine-overridable",
+          "description": "Firely Terminal executable for quick validation (without arguments)."
         }
       }
     }

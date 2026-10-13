@@ -10,6 +10,7 @@ dotnet_dir="$install_root/dotnet"
 node_dir="$install_root/node"
 temp_dir="$(mktemp -d)"
 node_executable="${1:-}"
+sdk_only="${2:-}"
 
 trap 'rm -rf "$temp_dir"' EXIT
 
@@ -72,7 +73,7 @@ if [ -x "$dotnet_dir/dotnet" ]; then
   fi
 fi
 
-if ! command -v fhir >/dev/null 2>&1; then
+if [[ "$sdk_only" != --sdk-only ]] && ! command -v fhir >/dev/null 2>&1; then
   echo "Installing Firely Terminal..."
   dotnet tool install Firely.Terminal --tool-path "$bin_dir"
 fi
@@ -119,7 +120,9 @@ if ! command -v sushi >/dev/null 2>&1; then
 fi
 
 dotnet --list-sdks | grep -q '^8\.'
-fhir --version
+if [[ "$sdk_only" != --sdk-only ]]; then
+  fhir --version
+fi
 npm --version
 sushi --version
 

@@ -1,3 +1,5 @@
+param([switch] $SdkOnly)
+
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2
@@ -94,10 +96,10 @@ try {
         $env:DOTNET_ROOT = $dotnetDir
     }
 
-    if ($null -eq (Get-Command fhir -ErrorAction SilentlyContinue)) {
+    if (-not $SdkOnly -and $null -eq (Get-Command fhir -ErrorAction SilentlyContinue)) {
         Write-Step 'Installing Firely Terminal...'
         Invoke-Checked 'dotnet' @('tool', 'install', 'Firely.Terminal', '--tool-path', $binDir)
-    } else {
+    } elseif (-not $SdkOnly) {
         Write-Step 'Firely Terminal is available.'
     }
 
@@ -154,7 +156,7 @@ try {
 
     Write-Step 'Verifying tool versions...'
     Invoke-Checked 'dotnet' @('--list-sdks')
-    Invoke-Checked 'fhir' @('--version')
+    if (-not $SdkOnly) { Invoke-Checked 'fhir' @('--version') }
     Invoke-Checked ((Get-Command npm -ErrorAction Stop).Source) @('--version')
     Invoke-Checked ((Get-Command sushi -ErrorAction Stop).Source) @('--version')
     Write-Step 'Firely validation tools are ready.'

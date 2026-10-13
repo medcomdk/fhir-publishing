@@ -1,11 +1,10 @@
 const vscode = require('vscode');
 const path = require('node:path');
 
-function prepareOutput(configUri, output, diagnostics) {
-  const root = path.dirname(configUri.fsPath);
-  const resourceRoot = path.join(root, 'fsh-generated', 'resources') + path.sep;
+function prepareOutput(configUri, output, diagnostics, root = path.dirname(configUri.fsPath)) {
+  const resourceRoots = ['fsh-generated/resources', 'output'].map(directory => path.join(root, directory) + path.sep);
   diagnostics.forEach((file) => {
-    if (file.fsPath.startsWith(resourceRoot)) {
+    if (resourceRoots.some(resourceRoot => file.fsPath.startsWith(resourceRoot))) {
       diagnostics.delete(file);
     }
   });
@@ -30,7 +29,7 @@ function recordResult(diagnostics, { file, passed, output, findings = [] }) {
   diagnostics.set(vscode.Uri.file(file), entries);
 }
 
-async function chooseValidationOptions(signal) {
+async function chooseValidationOptions(signal, sdk = false) {
   if (signal.aborted) return undefined;
   const cancellation = new vscode.CancellationTokenSource();
   const cancelSelection = () => cancellation.cancel();
@@ -38,7 +37,9 @@ async function chooseValidationOptions(signal) {
   if (signal.aborted) cancellation.cancel();
   try {
     const selection = await vscode.window.showQuickPick(
-      [
+      sdk ? [
+        { label: 'Run _genonce.sh', picked: true, description: 'Rebuild package.tgz; clear to use the existing package' },
+      ] : [
         { label: 'Run SUSHI', picked: true, description: 'Rebuild fsh-generated before validation' },
         { label: 'Delete output folder', picked: true, description: 'Prevents Firely from using stale publisher output' },
       ],
@@ -50,6 +51,10 @@ async function chooseValidationOptions(signal) {
       cancellation.token,
     );
     if (selection === undefined) return undefined;
+    if (sdk) return {
+      sdk: true,
+      runGenonce: selection.some((item) => item.label === 'Run _genonce.sh'),
+    };
     return {
       runSushi: selection.some((item) => item.label === 'Run SUSHI'),
       deleteOutput: selection.some((item) => item.label === 'Delete output folder'),

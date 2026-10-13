@@ -99,3 +99,11 @@ test('terminates setup when validation is cancelled', async () => {
   controller.abort();
   await assert.rejects(running, { name: 'AbortError' });
 });
+
+for (const [platform, flag] of [['linux', '--sdk-only'], ['win32', '-SdkOnly']]) {
+  test(`SDK setup skips Terminal on ${platform}`, async () => {
+    const setup = loadSetup({ platform });
+    await setup.runToolSetup('/extension/install-tools.sh', '/workspace/ig', undefined, true);
+    assert.equal(setup.getStarted().task.execution.args.at(-1), flag);
+  });
+}

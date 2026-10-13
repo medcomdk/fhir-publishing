@@ -25,10 +25,6 @@ RUN gem install --no-document bundler jekyll
 
 # FHIR tooling
 RUN npm install -g fsh-sushi
-RUN dotnet tool install -g firely.terminal
-
-# Make .NET global tools available in every container process and shell.
-ENV PATH="/root/.dotnet/tools:${PATH}"
 
 # Setup python virtual environment
 RUN python3 -m venv /pythonvenv

@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const path = require('node:path');
 const { validateIg } = require('./workflow');
+const { validateIgWithSdk, requireSdkPackage } = require('./sdk-workflow');
 const { checkCancelled } = require('./process');
 const { chooseConfig, readSettings } = require('./project');
 const {
@@ -23,17 +24,22 @@ async function validateWithProgress(configUri, options, controller, ui) {
     if (token.isCancellationRequested) controller.abort();
     try {
       checkCancelled(controller.signal);
+      if (options.sdk && !options.runGenonce) {
+        await requireSdkPackage(options.workspaceRoot);
+        checkCancelled(controller.signal);
+      }
       progress.report({ message: 'Checking validation tools' });
       try {
         await runToolSetup(
-          ui.setupScript, path.dirname(configUri.fsPath), controller.signal,
+          ui.setupScript, options.workspaceRoot || path.dirname(configUri.fsPath), controller.signal, options.sdk === true,
         );
       } finally {
         ui.output.show(true);
       }
       configureDotnetEnvironment(ui.environmentVariableCollection);
       checkCancelled(controller.signal);
-      return await validateIg({
+      const validate = options.sdk ? validateIgWithSdk : validateIg;
+      return await validate({
         configPath: configUri.fsPath,
         ...options,
         ...readSettings(configUri),
@@ -48,28 +54,35 @@ async function validateWithProgress(configUri, options, controller, ui) {
   });
 }
 
-async function executeValidation(uri, controller, ui) {
+async function executeValidation(uri, controller, ui, sdk) {
   const configUri = await chooseConfig(uri, controller.signal);
   checkCancelled(controller.signal);
   if (!configUri) return undefined;
   if (configUri.scheme !== 'file') {
     throw new Error('Validation requires a local, WSL, SSH, or container filesystem workspace.');
   }
-  const options = await chooseValidationOptions(controller.signal);
+  const options = await chooseValidationOptions(controller.signal, sdk);
   checkCancelled(controller.signal);
   if (options === undefined) return undefined;
+  if (sdk) {
+    const folder = vscode.workspace.getWorkspaceFolder(configUri);
+    if (!folder || folder.uri.scheme !== 'file') {
+      throw new Error('SDK validation requires a local workspace folder containing the selected guide.');
+    }
+    options.workspaceRoot = folder.uri.fsPath;
+  }
   if (!await vscode.workspace.saveAll(false)) {
     throw new Error('Save the implementation guide files before validating.');
   }
   checkCancelled(controller.signal);
-  prepareOutput(configUri, ui.output, ui.diagnostics);
+  prepareOutput(configUri, ui.output, ui.diagnostics, options.workspaceRoot);
   return validateWithProgress(configUri, options, controller, ui);
 }
 
-async function startValidation(uri, ui) {
+async function startValidation(uri, ui, sdk = false) {
   if (shuttingDown) return;
   if (!vscode.workspace.isTrusted) {
-    await vscode.window.showErrorMessage('Trust this workspace before running SUSHI and Firely Terminal.');
+    await vscode.window.showErrorMessage('Trust this workspace before running validation tools.');
     return;
   }
   if (activeRun) {
@@ -78,7 +91,7 @@ async function startValidation(uri, ui) {
   }
 
   const controller = new AbortController();
-  const completion = executeValidation(uri, controller, ui).then(
+  const completion = executeValidation(uri, controller, ui, sdk).then(
     (summary) => ({ summary }),
     (error) => ({ error }),
   );
@@ -108,6 +121,7 @@ function activate(context) {
     ui.output,
     ui.diagnostics,
     vscode.commands.registerCommand('fhirIg.validate', (uri) => startValidation(uri, ui)),
+    vscode.commands.registerCommand('fhirIg.validateSdk', (uri) => startValidation(uri, ui, true)),
   );
 }
 

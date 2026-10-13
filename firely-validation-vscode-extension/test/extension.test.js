@@ -19,7 +19,7 @@ const configUri = { scheme: 'file', fsPath: '/test/ig/sushi-config.yaml' };
 const passingSummary = { passed: 1, failed: 0, skipped: 0, warnings: [] };
 
 function loadExtension(validateIg, {
-  holdNotifications = false, candidates = [configUri], runSushi = true, deleteOutput = false,
+  holdNotifications = false, candidates = [configUri], runSushi = true, deleteOutput = false, runGenonce = true, cancelOptions = false, workspaceRoot = '/test/ig', packageError,
 } = {}) {
   const commands = new Map();
   const notifications = [];
@@ -48,6 +48,7 @@ function loadExtension(validateIg, {
     workspace: {
       isTrusted: true,
       workspaceFolders: [{}],
+      getWorkspaceFolder: () => ({ uri: { scheme: 'file', fsPath: workspaceRoot } }),
       saveAll: async () => true,
       findFiles: async () => candidates,
       asRelativePath: (uri) => uri.fsPath,
@@ -62,7 +63,9 @@ function loadExtension(validateIg, {
       showWarningMessage: showMessage('warning'),
       showErrorMessage: showMessage('error'),
       showQuickPick: async (items, options, token) => {
+        if (options.canPickMany && cancelOptions) return undefined;
         if (options.canPickMany) return items.filter((item) =>
+          (item.label === 'Run _genonce.sh' && runGenonce) ||
           (item.label === 'Run SUSHI' && runSushi) ||
           (item.label === 'Delete output folder' && deleteOutput));
         pickerShown.resolve();
@@ -106,6 +109,10 @@ function loadExtension(validateIg, {
       require(name) {
         if (name === 'vscode') return vscode;
         if (name === './workflow') return { validateIg };
+        if (name === './sdk-workflow') return {
+          validateIgWithSdk: validateIg,
+          async requireSdkPackage() { if (packageError) throw packageError; },
+        };
         if (name === './setup') return {
           configureDotnetEnvironment() {},
           configureToolEnvironment() {},
@@ -127,6 +134,7 @@ function loadExtension(validateIg, {
   });
   return {
     run: commands.get('fhirIg.validate'),
+    runSdk: commands.get('fhirIg.validateSdk'),
     deactivate: extension.deactivate,
     notifications, notificationShown, pickerShown, log, outputShows, commands, diagnosticEntries, setupCalls,
   };
@@ -248,4 +256,43 @@ test('deactivation cancels an open project picker without starting the workflow'
   await run;
   assert.equal(calls, 0);
   assert.equal(fixture.notifications.length, 0);
+});
+
+
+for (const runGenonce of [true, false]) {
+  test(`SDK command passes the rebuild choice (${runGenonce}) and workspace root`, async () => {
+    let received;
+    const fixture = loadExtension(async (options) => {
+      received = options;
+      return passingSummary;
+    }, { runGenonce, workspaceRoot: '/test' });
+    await fixture.runSdk(configUri);
+    assert.equal(received.sdk, true);
+    assert.equal(received.runGenonce, runGenonce);
+    assert.equal(received.workspaceRoot, '/test');
+    assert.equal(received.runSushi, undefined);
+    assert.equal(received.deleteOutput, undefined);
+    assert.equal(received.publisherJarPath, undefined);
+    assert.equal(fixture.setupCalls[0].cwd, '/test');
+    assert.equal(fixture.commands.has('fhirIg.validate'), true);
+  });
+}
+
+test('cancelling the SDK options picker starts no tools', async () => {
+  let calls = 0;
+  const fixture = loadExtension(async () => { calls++; }, { cancelOptions: true });
+  await fixture.runSdk(configUri);
+  assert.equal(calls, 0);
+  assert.equal(fixture.setupCalls.length, 0);
+});
+
+
+test('missing package is reported before SDK tool setup when genonce is skipped', async () => {
+  let calls = 0;
+  const packageError = new Error('SDK validation cannot start: package.tgz is missing. Select Run _genonce.sh.');
+  const fixture = loadExtension(async () => { calls++; }, { runGenonce: false, packageError });
+  await fixture.runSdk(configUri);
+  assert.equal(calls, 0);
+  assert.equal(fixture.setupCalls.length, 0);
+  assert.equal(fixture.notifications[0].message, packageError.message);
 });

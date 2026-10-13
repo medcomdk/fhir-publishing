@@ -7,3 +7,5 @@ scripts/**
 DEVELOPMENT.md
 package-lock.json
 **/*.vsix
+validator/bin/**
+validator/obj/**

@@ -62,6 +62,8 @@ function readSettings(configUri) {
   return {
     firelyPath: settings.get('firelyPath', 'fhir'),
     sushiPath: settings.get('sushiPath', 'sushi'),
+    dotnetPath: settings.get('dotnetPath', 'dotnet'),
+    terminologyServer: settings.get('terminologyServer', 'https://tx.hl7europe.eu/r4'),
   };
 }
 

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       ALLOW_VALIDATION_FAILURE:
-        description: Continue publishing if Firely instance validation fails
+        description: Continue publishing if Firely SDK package validation fails
         required: false
         default: false
         type: boolean
@@ -32,13 +32,17 @@ on:
         required: true
 
 jobs:
-  validate:
-    name: Validate IG source
+  prepare:
+    name: Prepare IG release
     runs-on: ubuntu-latest
     container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
 
+    outputs:
+      ig_name: ${{ steps.ig_metadata.outputs.ig_name }}
+
     env:
       IG_CONTAINER_PATH: "ig"
+      RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
       PUBLISHING_TOOLS_PATH: "fhir-publishing-tools"
 
     steps:
@@ -47,40 +51,6 @@ jobs:
         with:
           path: ${{ env.IG_CONTAINER_PATH }}
 
-      - name: Checkout current publishing helpers
-        uses: actions/checkout@v4
-        with:
-          repository: medcomdk/fhir-publishing
-          ref: main
-          path: ${{ env.PUBLISHING_TOOLS_PATH }}
-          sparse-checkout: scripts
-
-      - name: Prepare Firely Terminal Setup
-        shell: bash
-        working-directory: ${{ env.IG_CONTAINER_PATH }}
-        run: bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/synchronize-sushi-and-firely.sh"
-
-      - name: Validate IG instances with Firely Terminal
-        id: firely_validation
-        continue-on-error: ${{ inputs.ALLOW_VALIDATION_FAILURE }}
-        shell: bash
-        working-directory: ${{ env.IG_CONTAINER_PATH }}
-        run: |
-          sushi .
-
-          bash "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/scripts/validate-all-resources-with-firely.sh"
-
-      - name: Report overridden validation failure
-        if: ${{ inputs.ALLOW_VALIDATION_FAILURE && steps.firely_validation.outcome == 'failure' }}
-        shell: bash
-        run: |
-          echo "::warning::The validation step failed. Publishing continues because ALLOW_VALIDATION_FAILURE is enabled."
-          echo "The validation step failed and was explicitly overridden with ALLOW_VALIDATION_FAILURE. See the validation logs for details." >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Clean up after Firely Terminal Setup
-        shell: bash
-        run: cd ${{ env.IG_CONTAINER_PATH }} && rm package.json && rm fhirpkg.lock.json
-          
       - name: Validate IG source does NOT contain package-list.json
         shell: bash
         run: |
@@ -93,35 +63,6 @@ jobs:
           else
             echo "✅ No package-list.json found in ${IG_SOURCE_NAME} repo"
           fi
-
-      - name: Upload validated IG source
-        uses: actions/upload-artifact@v4
-        with:
-          name: validated-ig
-          path: ${{ env.IG_CONTAINER_PATH }}
-          if-no-files-found: error
-          retention-days: 7
-          overwrite: true
-
-  prepare:
-    name: Prepare IG release
-    needs: validate
-    runs-on: ubuntu-latest
-    container: ghcr.io/medcomdk/medcom-github-actions-container:3.0.0
-
-    outputs:
-      ig_name: ${{ steps.ig_metadata.outputs.ig_name }}
-
-    env:
-      IG_CONTAINER_PATH: "ig"
-      RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
-
-    steps:
-      - name: Download validated IG source
-        uses: actions/download-artifact@v4
-        with:
-          name: validated-ig
-          path: ${{ env.IG_CONTAINER_PATH }}
 
       - name: Extract IG name from canonical URL
         id: ig_metadata
@@ -169,6 +110,29 @@ jobs:
         shell: bash
         working-directory: ${{ env.IG_CONTAINER_PATH }}
         run: java -jar /input-cache/publisher.jar .
+
+      - name: Checkout SDK validator
+        uses: actions/checkout@v4
+        with:
+          repository: medcomdk/fhir-publishing
+          ref: main
+          path: ${{ env.PUBLISHING_TOOLS_PATH }}
+          sparse-checkout: firely-validation-vscode-extension/validator
+
+      - name: Validate built IG package with Firely .NET SDK
+        id: sdk_validation
+        continue-on-error: ${{ inputs.ALLOW_VALIDATION_FAILURE }}
+        shell: bash
+        run: |
+          dotnet run --project "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/firely-validation-vscode-extension/validator/FirelyValidator.csproj" --configuration Release -- \
+            "$GITHUB_WORKSPACE/${{ env.IG_CONTAINER_PATH }}/output/package.tgz"
+
+      - name: Report overridden SDK validation failure
+        if: ${{ inputs.ALLOW_VALIDATION_FAILURE && steps.sdk_validation.outcome == 'failure' }}
+        shell: bash
+        run: |
+          echo "::warning::Firely SDK package validation failed. Publishing continues because ALLOW_VALIDATION_FAILURE is enabled."
+          echo "Firely SDK package validation failed and was explicitly overridden with ALLOW_VALIDATION_FAILURE. See the validation logs for details." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload prepared IG source
         uses: actions/upload-artifact@v4

@@ -55,7 +55,7 @@ function cancellationError() {
   return error;
 }
 
-async function runToolSetup(scriptPath, cwd, signal) {
+async function runToolSetup(scriptPath, cwd, signal, sdkOnly = false) {
   checkCancelled(signal);
   const windows = process.platform === 'win32';
   const executable = windows ? 'powershell.exe' : 'bash';
@@ -63,8 +63,9 @@ async function runToolSetup(scriptPath, cwd, signal) {
     ? [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
       '-File', scriptPath.replace(/\.sh$/i, '.ps1'),
+      ...(sdkOnly ? ['-SdkOnly'] : []),
     ]
-    : [scriptPath, process.execPath];
+    : [scriptPath, process.execPath, ...(sdkOnly ? ['--sdk-only'] : [])];
   const task = new vscode.Task(
     { type: 'fhirIg.setup' },
     vscode.TaskScope.Workspace,
