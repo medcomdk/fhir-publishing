@@ -22,7 +22,7 @@ if "%LIVE_IG_PREVIEW_NO_UPDATE%"=="1" goto updated
 echo Checking for preview script updates...
 where curl.exe >nul 2>&1 || goto updatefailed
 set "candidate=%root%.live-IG-preview-%RANDOM%-%RANDOM%.bat"
-curl.exe --fail --silent --show-error --location --proto "=https" --connect-timeout 3 --max-time 10 "https://raw.githubusercontent.com/medcomdk/fhir-publishing/main/helpers/lige-ig-preview.bat" --output "%candidate%"
+curl.exe --fail --silent --show-error --location --proto "=https" --connect-timeout 3 --max-time 10 "https://raw.githubusercontent.com/medcomdk/fhir-publishing/main/helpers/live-ig-preview.bat" --output "%candidate%"
 if errorlevel 1 goto updatefailed
 set "firstline="
 set /p "firstline=" < "%candidate%"

@@ -27,7 +27,7 @@ if [[ "${LIVE_IG_PREVIEW_UPDATED:-0}" != 1 && "${LIVE_IG_PREVIEW_NO_UPDATE:-0}" 
   if command -v curl >/dev/null 2>&1 && candidate=$(mktemp "$root/.live-IG-preview.XXXXXX"); then
     if curl --fail --silent --show-error --location --proto '=https' \
       --connect-timeout 3 --max-time 10 \
-      'https://raw.githubusercontent.com/medcomdk/fhir-publishing/main/helpers/lige-ig-preview.sh' \
+      'https://raw.githubusercontent.com/medcomdk/fhir-publishing/main/helpers/live-ig-preview.sh' \
       --output "$candidate" && head -n 1 "$candidate" | grep -q '^#!/.*bash' \
       && bash -n "$candidate"; then
       if ! cmp -s "${BASH_SOURCE[0]}" "$candidate"; then
