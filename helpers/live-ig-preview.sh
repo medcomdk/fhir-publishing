@@ -2,6 +2,9 @@
 # Preview narrative edits using an existing Publisher build.
 set -euo pipefail
 
+# Increase this integer whenever publishing an updated script.
+PREVIEW_SCRIPT_VERSION=2
+
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 port="${1:-4000}"
 if [[ "$port" == "--help" || "$port" == "-h" ]]; then
@@ -31,11 +34,17 @@ if [[ "${LIVE_IG_PREVIEW_UPDATED:-0}" != 1 && "${LIVE_IG_PREVIEW_NO_UPDATE:-0}" 
       --output "$candidate" && head -n 1 "$candidate" | grep -q '^#!/.*bash' \
       && bash -n "$candidate"; then
       if ! cmp -s "${BASH_SOURCE[0]}" "$candidate"; then
-        if chmod +x "$candidate" && mv -f -- "$candidate" "${BASH_SOURCE[0]}"; then
+        remote_version=$(sed -n 's/^PREVIEW_SCRIPT_VERSION=\([0-9]\{1,9\}\)$/\1/p' "$candidate" | head -n 1)
+        if [[ -z "$remote_version" ]]; then
+          echo "Hosted script has no version; keeping local version $PREVIEW_SCRIPT_VERSION."
+        elif (( 10#$remote_version <= PREVIEW_SCRIPT_VERSION )); then
+          echo "Hosted version $remote_version is not newer; keeping local version $PREVIEW_SCRIPT_VERSION."
+        elif chmod +x "$candidate" && mv -f -- "$candidate" "${BASH_SOURCE[0]}"; then
           echo "Preview script updated. Restarting..."
           exec env LIVE_IG_PREVIEW_UPDATED=1 bash "${BASH_SOURCE[0]}" "$@"
+        else
+          echo "Could not install the update; continuing with the local script." >&2
         fi
-        echo "Could not install the update; continuing with the local script." >&2
       else
         echo "Preview script is up to date."
       fi
@@ -83,8 +92,10 @@ sync_content() {
 server_pid=""
 cleanup() {
   if [[ -n "$server_pid" ]]; then
-    kill -TERM "$server_pid" 2>/dev/null || true
+    # Jekyll handles SIGINT gracefully; SIGTERM prints a Ruby backtrace.
+    kill -INT "$server_pid" 2>/dev/null || true
     wait "$server_pid" 2>/dev/null || true
+    echo "Preview stopped."
   fi
 }
 trap cleanup EXIT
