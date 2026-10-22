@@ -1,9 +1,9 @@
 {
   "name": "fhir-ig-firely-validator",
   "displayName": "MedCom Firely Validation",
-  "description": "Quick Firely Terminal validation or Firely .NET SDK validation with an optional _genonce.sh rebuild.",
+  "description": "Firely validation and live narrative preview for FHIR implementation guides.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.1.0",
+  "version": "1.2.2",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {
@@ -22,7 +22,9 @@
     "FHIR",
     "SUSHI",
     "Firely",
-    "validation"
+    "validation",
+    "preview",
+    "Jekyll"
   ],
   "main": "./src/extension.js",
   "extensionKind": [
@@ -31,7 +33,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "Validation runs SUSHI, Firely Terminal, IG Publisher, and the Firely .NET SDK in the implementation guide directory."
+      "description": "Validation and live preview run local tools, including IG Publisher and Jekyll, in the implementation guide directory."
     },
     "virtualWorkspaces": {
       "supported": false
@@ -48,6 +50,20 @@
         "command": "fhirIg.validateSdk",
         "title": "MedCom Firely Validation: Validate with SDK",
         "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "fhirIg.startPreview",
+        "title": "MedCom IG Preview: Start Live Preview",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "fhirIg.stopPreview",
+        "title": "MedCom IG Preview: Stop Live Preview"
+      },
+      {
+        "command": "fhirIg.openPreview",
+        "title": "MedCom IG Preview: Open Live Preview",
+        "enablement": "isWorkspaceTrusted"
       }
     ],
     "menus": {
@@ -59,6 +75,11 @@
         },
         {
           "command": "fhirIg.validateSdk",
+          "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.startPreview",
           "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
           "group": "navigation"
         }
@@ -90,6 +111,20 @@
           "default": "fhir",
           "scope": "machine-overridable",
           "description": "Firely Terminal executable for quick validation (without arguments)."
+        },
+        "fhirIg.preview.jekyllPath": {
+          "type": "string",
+          "default": "jekyll",
+          "scope": "machine-overridable",
+          "description": "Jekyll executable name or absolute path (without arguments). The default uses the managed preview installation when available; otherwise the extension offers to install Ruby/Jekyll when missing."
+        },
+        "fhirIg.preview.port": {
+          "type": "integer",
+          "default": 4000,
+          "minimum": 1,
+          "maximum": 65535,
+          "scope": "resource",
+          "description": "Live preview HTTP port. The adjacent port is used for LiveReload and must also be available."
         }
       }
     }

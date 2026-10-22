@@ -19,7 +19,7 @@ function nearestConfig(candidates, fileUri) {
     .sort((a, b) => b.fsPath.length - a.fsPath.length)[0];
 }
 
-async function pickConfig(candidates, signal) {
+async function pickConfig(candidates, signal, placeHolder) {
   const cancellation = new vscode.CancellationTokenSource();
   const cancelSelection = () => cancellation.cancel();
   signal.addEventListener('abort', cancelSelection, { once: true });
@@ -27,7 +27,7 @@ async function pickConfig(candidates, signal) {
     checkCancelled(signal);
     const selection = await vscode.window.showQuickPick(
       candidates.map((uri) => ({ label: vscode.workspace.asRelativePath(uri), uri })),
-      { placeHolder: 'Select the implementation guide to build and validate' },
+      { placeHolder },
       cancellation.token,
     );
     return selection?.uri;
@@ -37,7 +37,7 @@ async function pickConfig(candidates, signal) {
   }
 }
 
-async function chooseConfig(uri, signal) {
+async function chooseConfig(uri, signal, placeHolder = 'Select the implementation guide to build and validate') {
   checkCancelled(signal);
   if (!vscode.workspace.workspaceFolders?.length) {
     throw new Error('Open an implementation guide folder first.');
@@ -54,7 +54,7 @@ async function chooseConfig(uri, signal) {
     return candidates[0];
   }
   const currentFile = uri || vscode.window.activeTextEditor?.document.uri;
-  return nearestConfig(candidates, currentFile) || pickConfig(candidates, signal);
+  return nearestConfig(candidates, currentFile) || pickConfig(candidates, signal, placeHolder);
 }
 
 function readSettings(configUri) {

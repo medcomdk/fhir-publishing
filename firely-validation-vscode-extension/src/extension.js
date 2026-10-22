@@ -4,6 +4,7 @@ const { validateIg } = require('./workflow');
 const { validateIgWithSdk, requireSdkPackage } = require('./sdk-workflow');
 const { checkCancelled } = require('./process');
 const { chooseConfig, readSettings } = require('./project');
+const { createPreview } = require('./preview-ui');
 const {
   configureDotnetEnvironment, configureToolEnvironment, runToolSetup,
 } = require('./setup');
@@ -13,6 +14,7 @@ const {
 
 let activeRun;
 let shuttingDown = false;
+let preview;
 
 async function validateWithProgress(configUri, options, controller, ui) {
   return vscode.window.withProgress({
@@ -89,6 +91,10 @@ async function startValidation(uri, ui, sdk = false) {
     await vscode.window.showWarningMessage('A Firely validation is already running. Wait for it or cancel it first.');
     return;
   }
+  if (preview?.isRunning()) {
+    await vscode.window.showWarningMessage('Stop live preview before running validation. A Publisher rebuild can replace the preview source files.');
+    return;
+  }
 
   const controller = new AbortController();
   const completion = executeValidation(uri, controller, ui, sdk).then(
@@ -117,20 +123,26 @@ function activate(context) {
     setupScript: context.asAbsolutePath('install-tools.sh'),
     environmentVariableCollection: context.environmentVariableCollection,
   };
+  preview = createPreview(context, () => !!activeRun);
   context.subscriptions.push(
     ui.output,
     ui.diagnostics,
     vscode.commands.registerCommand('fhirIg.validate', (uri) => startValidation(uri, ui)),
     vscode.commands.registerCommand('fhirIg.validateSdk', (uri) => startValidation(uri, ui, true)),
+    vscode.commands.registerCommand('fhirIg.startPreview', (uri) => preview.start(uri)),
+    vscode.commands.registerCommand('fhirIg.stopPreview', () => preview.stop()),
+    vscode.commands.registerCommand('fhirIg.openPreview', () => preview.open()),
   );
 }
 
 async function deactivate() {
   shuttingDown = true;
+  const stoppingPreview = preview?.deactivate();
   if (activeRun) {
     activeRun.controller.abort();
     await activeRun.completion;
   }
+  await stoppingPreview;
 }
 
 module.exports = { activate, deactivate };

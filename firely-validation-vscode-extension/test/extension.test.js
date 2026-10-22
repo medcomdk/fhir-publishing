@@ -19,7 +19,7 @@ const configUri = { scheme: 'file', fsPath: '/test/ig/sushi-config.yaml' };
 const passingSummary = { passed: 1, failed: 0, skipped: 0, warnings: [] };
 
 function loadExtension(validateIg, {
-  holdNotifications = false, candidates = [configUri], runSushi = true, deleteOutput = false, runGenonce = true, cancelOptions = false, workspaceRoot = '/test/ig', packageError,
+  holdNotifications = false, candidates = [configUri], runSushi = true, deleteOutput = false, runGenonce = true, cancelOptions = false, workspaceRoot = '/test/ig', packageError, previewWorkflow,
 } = {}) {
   const commands = new Map();
   const notifications = [];
@@ -56,6 +56,7 @@ function loadExtension(validateIg, {
     },
     window: {
       createOutputChannel: () => output,
+      createStatusBarItem: () => ({ show() {}, hide() {} }),
       withProgress: (_, task) => task({ report() {} }, {
         onCancellationRequested: () => ({ dispose() {} }),
       }),
@@ -84,6 +85,7 @@ function loadExtension(validateIg, {
       registerCommand: (name, handler) => { commands.set(name, handler); return {}; },
     },
     ProgressLocation: { Notification: 15 },
+    StatusBarAlignment: { Left: 1 },
     CancellationTokenSource: class {
       constructor() {
         this.listeners = [];
@@ -108,6 +110,7 @@ function loadExtension(validateIg, {
       process,
       require(name) {
         if (name === 'vscode') return vscode;
+        if (name === './preview' && previewWorkflow) return { runPreview: previewWorkflow };
         if (name === './workflow') return { validateIg };
         if (name === './sdk-workflow') return {
           validateIgWithSdk: validateIg,
@@ -135,10 +138,31 @@ function loadExtension(validateIg, {
   return {
     run: commands.get('fhirIg.validate'),
     runSdk: commands.get('fhirIg.validateSdk'),
+    startPreview: commands.get('fhirIg.startPreview'),
+    stopPreview: commands.get('fhirIg.stopPreview'),
     deactivate: extension.deactivate,
     notifications, notificationShown, pickerShown, log, outputShows, commands, diagnosticEntries, setupCalls,
   };
 }
+
+test('validation waits until the live preview has stopped', { timeout: 5000 }, async () => {
+  const started = deferred();
+  let validations = 0;
+  const fixture = loadExtension(async () => { validations++; }, {
+    previewWorkflow: async ({ signal }) => {
+      started.resolve();
+      await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+    },
+  });
+  await fixture.startPreview(configUri);
+  await started.promise;
+  await fixture.run(configUri);
+  assert.equal(validations, 0);
+  assert.match(fixture.notifications.at(-1).message, /Stop live preview/);
+  await fixture.stopPreview();
+  await fixture.run(configUri);
+  assert.equal(validations, 1);
+});
 
 for (const outcome of ['success', 'findings', 'warning', 'error', 'cancelled']) {
   test(`another run can start while the ${outcome} notification is open`, { timeout: 5000 }, async () => {

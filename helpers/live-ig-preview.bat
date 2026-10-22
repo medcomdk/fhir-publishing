@@ -17,40 +17,6 @@ if "%port:~0,1%"=="0" if not "%port%"=="0" (
 if %port% LSS 1 goto help
 if %port% GTR 65535 goto help
 
-if "%LIVE_IG_PREVIEW_UPDATED%"=="1" goto updated
-if "%LIVE_IG_PREVIEW_NO_UPDATE%"=="1" goto updated
-echo Checking for preview script updates...
-where curl.exe >nul 2>&1 || goto updatefailed
-set "candidate=%root%.live-IG-preview-%RANDOM%-%RANDOM%.bat"
-curl.exe --fail --silent --show-error --location --proto "=https" --connect-timeout 3 --max-time 10 "https://raw.githubusercontent.com/medcomdk/fhir-publishing/main/helpers/live-ig-preview.bat" --output "%candidate%"
-if errorlevel 1 goto updatefailed
-set "firstline="
-set /p "firstline=" < "%candidate%"
-if /i not "%firstline%"=="@echo off" goto updatefailed
-fc /b "%~f0" "%candidate%" >nul 2>&1
-if not errorlevel 1 goto uptodate
-rem Parse this entire block before replacing the running batch file, then hand off.
-(
-  move /y "%candidate%" "%~f0" >nul
-  if errorlevel 1 (
-    echo Could not install the update; continuing with the local script.
-    del /q "%candidate%" >nul 2>&1
-    goto updated
-  )
-  echo Preview script updated. Restarting...
-  set "LIVE_IG_PREVIEW_UPDATED=1"
-  "%~f0" %*
-  exit /b
-)
-:uptodate
-echo Preview script is up to date.
-del /q "%candidate%" >nul 2>&1
-goto updated
-:updatefailed
-echo Update unavailable or invalid; continuing with the local script.
-if defined candidate if exist "%candidate%" del /q "%candidate%" >nul 2>&1
-:updated
-set "LIVE_IG_PREVIEW_UPDATED="
 set "pages=%root%temp\pages"
 set "includes=%pages%\_includes"
 set "source_dir=%root%input\pagecontent"
