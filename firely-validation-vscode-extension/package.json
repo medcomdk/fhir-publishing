@@ -3,7 +3,7 @@
   "displayName": "MedCom Firely Validation",
   "description": "Firely validation and live narrative preview for FHIR implementation guides.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {
@@ -67,6 +67,30 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "fhirIg.startPreview",
+          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.stopPreview",
+          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "fhirIg.startPreview",
+          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.stopPreview",
+          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        }
+      ],
       "explorer/context": [
         {
           "command": "fhirIg.validate",
@@ -80,7 +104,12 @@
         },
         {
           "command": "fhirIg.startPreview",
-          "when": "resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml",
+          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.stopPreview",
+          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         }
       ]

@@ -13,7 +13,7 @@ async function choosePreviewTarget(signal) {
   signal.addEventListener('abort', abort, { once: true });
   try {
     const selection = await vscode.window.showQuickPick([
-      { label: 'Open in VS Code', picked: true, description: 'Clear to open in your default browser' },
+      { label: 'Open in VS Code', picked: false, description: 'Select to open in VS Code instead of your default browser' },
     ], {
       canPickMany: true,
       title: 'Live preview',
@@ -30,12 +30,19 @@ async function choosePreviewTarget(signal) {
 
 function createPreview(context, validationRunning) {
   const output = vscode.window.createOutputChannel('MedCom IG Preview');
-  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left);
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  status.name = 'MedCom IG Live Preview';
   status.command = 'fhirIg.stopPreview';
-  status.tooltip = 'Stop the IG live preview';
+  status.tooltip = 'Click to stop the IG live preview';
   context.subscriptions.push(output, status);
   let active;
   let shuttingDown = false;
+  void vscode.commands.executeCommand('setContext', 'fhirIg.previewActive', false);
+
+  function showStatus(text) {
+    status.text = `${text} — $(debug-stop) Stop`;
+    status.show();
+  }
 
   async function openSession(session, target) {
     if (!session?.url || session.controller.signal.aborted) return;
@@ -84,8 +91,8 @@ function createPreview(context, validationRunning) {
     output.clear();
     output.appendLine(`Live IG preview: ${path.dirname(config.fsPath)}`);
     output.show(true);
-    status.text = '$(sync~spin) Starting IG preview';
-    status.show();
+    status.tooltip = `Live preview: ${path.dirname(config.fsPath)}\nClick to stop the IG live preview`;
+    showStatus('$(sync~spin) IG Preview: Starting');
     const configuredJekyll = settings.get('preview.jekyllPath', 'jekyll');
     const options = {
       root: path.dirname(config.fsPath),
@@ -96,7 +103,8 @@ function createPreview(context, validationRunning) {
       onReady: async (url) => {
         checkCancelled(signal);
         session.url = url;
-        status.text = '$(debug-stop) IG Preview';
+        status.tooltip = `Live preview: ${options.root}\n${url}\nClick to stop the IG live preview`;
+        showStatus('$(radio-tower) IG Preview: Running');
         try {
           await openSession(session, session.target);
         } catch (error) {
@@ -111,17 +119,17 @@ function createPreview(context, validationRunning) {
       // An explicitly configured executable belongs to the user; preserve it.
       if (error.code !== 'JEKYLL_UNAVAILABLE' || configuredJekyll !== 'jekyll' || installed) throw error;
       output.appendLine(error.message);
-      status.text = '$(tools) Set up IG preview';
+      showStatus('$(tools) IG Preview: Setup required');
       if (!await confirmPreviewSetup(signal)) return false;
       checkCancelled(signal);
       installed = true;
-      status.text = '$(sync~spin) Installing preview dependencies';
+      showStatus('$(sync~spin) IG Preview: Installing dependencies');
       options.jekyllPath = await runPreviewSetup(
         context.asAbsolutePath('install-preview-tools.sh'), options.root, signal,
       );
       checkCancelled(signal);
       output.show(true);
-      status.text = '$(sync~spin) Starting IG preview';
+      showStatus('$(sync~spin) IG Preview: Starting');
       return true;
     }
     while (true) {
@@ -142,11 +150,11 @@ function createPreview(context, validationRunning) {
             await checkJekyll(options);
           }
           built = true;
-          status.text = '$(sync~spin) Building IG with Publisher';
+          showStatus('$(sync~spin) IG Preview: Building with Publisher');
           await runPublisherBuild(options.root, options.jekyllPath, signal);
           checkCancelled(signal);
           output.show(true);
-          status.text = '$(sync~spin) Starting IG preview';
+          showStatus('$(sync~spin) IG Preview: Starting');
         } else if (!await installDependencies(error)) return;
       }
     }
@@ -169,6 +177,9 @@ function createPreview(context, validationRunning) {
     }
     const session = { controller: new AbortController() };
     active = session;
+    void vscode.commands.executeCommand('setContext', 'fhirIg.previewActive', true);
+    status.tooltip = 'Click to stop the IG live preview';
+    showStatus('$(sync~spin) IG Preview: Starting');
     session.completion = execute(uri, session).catch((error) => {
       if (!session.controller.signal.aborted) {
         output.appendLine(error.message);
@@ -176,8 +187,11 @@ function createPreview(context, validationRunning) {
       }
       return undefined;
     }).finally(() => {
-      if (active === session) active = undefined;
-      status.hide();
+      if (active === session) {
+        active = undefined;
+        status.hide();
+        void vscode.commands.executeCommand('setContext', 'fhirIg.previewActive', false);
+      }
       output.appendLine('Preview stopped.');
     });
     // The command returns once launched; the session owns the server lifetime.
@@ -191,6 +205,8 @@ function createPreview(context, validationRunning) {
   async function stop() {
     const session = active;
     if (!session) return;
+    status.text = '$(sync~spin) IG Preview: Stopping';
+    status.tooltip = 'Waiting for the IG live preview to stop';
     session.controller.abort();
     await session.completion;
   }

@@ -82,6 +82,7 @@ function loadExtension(validateIg, {
     Diagnostic: class { constructor(range, message, severity) { Object.assign(this, { range, message, severity }); } },
     DiagnosticSeverity: { Error: 0 },
     commands: {
+      async executeCommand() {},
       registerCommand: (name, handler) => { commands.set(name, handler); return {}; },
     },
     ProgressLocation: { Notification: 15 },

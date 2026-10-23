@@ -12,9 +12,9 @@ function deferred() {
 }
 
 function fixture({
-  trusted = true, validating = false, target = 'vscode', browserError = false, failed = false,
+  trusted = true, validating = false, target = 'default', browserError = false, failed = false,
   missing = false, install = true, installError, alwaysMissing = false, customJekyll = false, installer,
-  choices = [], holdPicker = false,
+  choices = [], holdPicker = false, cleanup,
   buildRequired = false, buildConsent = true, buildError, builder, alwaysBuildRequired = false, buildNeedsJekyll = false,
 } = {}) {
   const ready = deferred();
@@ -22,7 +22,8 @@ function fixture({
   const messages = [];
   const opened = [];
   const log = [];
-  const status = { show() {}, hide() { this.hidden = true; } };
+  const status = { show() { this.hidden = false; }, hide() { this.hidden = true; } };
+  const contexts = new Map();
   const config = { scheme: 'file', fsPath: '/guide/sushi-config.yaml' };
   let calls = 0;
   let prompts = 0;
@@ -50,7 +51,8 @@ function fixture({
         const choice = choices.length ? choices.shift() : target;
         if (holdPicker || choice === 'hold') return new Promise((resolve) => token.onCancellationRequested(() => resolve(undefined)));
         if (choice === 'cancel') return undefined;
-        return choice === 'vscode' ? items.filter((item) => item.picked) : [];
+        if (choice === 'default') return items.filter((item) => item.picked);
+        return choice === 'vscode' ? [items[0]] : [];
       },
     },
     Uri: { parse: (url) => ({ url }) },
@@ -70,6 +72,10 @@ function fixture({
     },
     commands: {
       async executeCommand(command, uri, options) {
+        if (command === 'setContext') {
+          contexts.set(uri, options);
+          return;
+        }
         if (browserError) throw new Error('Browser disabled');
         opened.push({ target: 'vscode', command, uri, options });
       },
@@ -124,6 +130,7 @@ function fixture({
           await options.onReady('http://127.0.0.1:4000/');
           ready.resolve(options);
           await cancelled;
+          if (cleanup) await cleanup;
           stopped.resolve();
           throw Object.assign(new Error('Stopped'), { name: 'AbortError' });
         },
@@ -134,13 +141,13 @@ function fixture({
   const preview = module.exports.createPreview({
     subscriptions: [], asAbsolutePath: (file) => '/extension/' + file,
   }, () => validating);
-  return { preview, ready, stopped, messages, opened, log, status, setupCalls, previewCalls,
+  return { preview, ready, stopped, messages, opened, log, status, contexts, setupCalls, previewCalls,
     pickers, buildCalls, events, getBuildPrompts: () => buildPrompts,
     getCalls: () => calls, getPrompts: () => prompts };
 }
 
 test('opens beside the editor after readiness and reuses the running preview', async () => {
-  const { preview, ready, opened, status, getCalls } = fixture();
+  const { preview, ready, opened, status, getCalls } = fixture({ target: 'vscode' });
   await preview.start();
   await ready.promise;
   assert.equal(preview.isRunning(), true);
@@ -155,8 +162,8 @@ test('opens beside the editor after readiness and reuses the running preview', a
   assert.equal(preview.isRunning(), false);
 });
 
-test('Start and Open each show a checked VS Code option and use the choice only for that invocation', async () => {
-  const { preview, ready, opened, pickers, getCalls } = fixture({ choices: ['browser', 'vscode', 'browser', 'vscode'] });
+test('Start and Open default to the browser and allow opting into VS Code for each invocation', async () => {
+  const { preview, ready, opened, pickers, getCalls } = fixture({ choices: ['default', 'vscode', 'default', 'vscode'] });
   await preview.start();
   await ready.promise;
   await preview.open();
@@ -168,19 +175,44 @@ test('Start and Open each show a checked VS Code option and use the choice only 
   for (const picker of pickers) {
     assert.equal(picker.options.canPickMany, true);
     assert.equal(picker.items[0].label, 'Open in VS Code');
-    assert.equal(picker.items[0].picked, true);
+    assert.equal(picker.items[0].picked, false);
   }
   await preview.stop();
 });
 
+test('shows running and stopping status and keeps Stop available until cleanup finishes', async () => {
+  const cleanup = deferred();
+  const { preview, ready, status, contexts } = fixture({ cleanup: cleanup.promise });
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
+  await preview.start();
+  assert.equal(contexts.get('fhirIg.previewActive'), true);
+  assert.match(status.text, /Starting.*Stop/);
+  await ready.promise;
+  assert.equal(status.hidden, false);
+  assert.match(status.text, /IG Preview: Running.*Stop/);
+  assert.equal(status.command, 'fhirIg.stopPreview');
+  assert.match(status.tooltip, /\/guide/);
+  assert.match(status.tooltip, /http:\/\/127.0.0.1:4000\//);
+  const stopping = preview.stop();
+  assert.match(status.text, /IG Preview: Stopping/);
+  assert.equal(status.hidden, false);
+  assert.equal(contexts.get('fhirIg.previewActive'), true);
+  cleanup.resolve();
+  await stopping;
+  assert.equal(status.hidden, true);
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
+});
+
 test('cancelling the initial checkbox picker starts no server or dependency installer', async () => {
-  const { preview, getCalls, setupCalls, messages } = fixture({ choices: ['cancel'] });
+  const { preview, getCalls, setupCalls, messages, status, contexts } = fixture({ choices: ['cancel'] });
   await preview.start();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(preview.isRunning(), false);
   assert.equal(getCalls(), 0);
   assert.equal(setupCalls.length, 0);
   assert.equal(messages.length, 0);
+  assert.equal(status.hidden, true);
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
 });
 
 test('cancelling Open leaves the preview running and does not open another view', async () => {
@@ -215,7 +247,7 @@ test('stopping while Open is choosing a destination cancels both the picker and 
   assert.equal(preview.isRunning(), false);
 });
 
-for (const options of [{ target: 'browser' }, { browserError: true }]) {
+for (const options of [{ target: 'browser' }, { target: 'vscode', browserError: true }]) {
   test(`opens externally for ${options.target || 'an unavailable VS Code browser'}`, async () => {
     const { preview, ready, opened } = fixture(options);
     await preview.start();
@@ -237,10 +269,12 @@ for (const options of [{ trusted: false }, { validating: true }]) {
 }
 
 test('reports startup failure and releases the session so it can be started again', async () => {
-  const { preview, messages, getCalls } = fixture({ failed: true });
+  const { preview, messages, getCalls, status, contexts } = fixture({ failed: true });
   await preview.start();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(preview.isRunning(), false);
+  assert.equal(status.hidden, true);
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
   assert.match(messages[0], /Missing Publisher build/);
   await preview.start();
   await new Promise((resolve) => setImmediate(resolve));
