@@ -254,11 +254,11 @@ jobs:
         shell: bash
         run: >-
           java -jar /input-cache/publisher.jar -go-publish
-          -source ${{ env.IG_CONTAINER_PATH }}
-          -web ${{ env.WEB_REPO_CONTAINER_PATH }}/ig
-          -history ${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}
-          -registry ${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json
-          -templates ${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates
+          -source "$GITHUB_WORKSPACE/${{ env.IG_CONTAINER_PATH }}"
+          -web "$GITHUB_WORKSPACE/${{ env.WEB_REPO_CONTAINER_PATH }}/ig"
+          -history "$GITHUB_WORKSPACE/${{ env.IG_HISTORY_TEMPLATE_CONTAINER_PATH }}"
+          -registry "$GITHUB_WORKSPACE/${{ env.REGISTRY_REPO_CONTAINER_PATH }}/fhir-ig-list.json"
+          -templates "$GITHUB_WORKSPACE/${{ env.WEB_REPO_CONTAINER_PATH }}/ig/templates"
 
       - name: Stage published IG output
         shell: bash
