@@ -12,9 +12,9 @@ function deferred() {
 }
 
 function fixture({
-  trusted = true, validating = false, target = 'default', browserError = false, failed = false,
+  trusted = true, validating = false, browserError = false, failed = false,
   missing = false, install = true, installError, alwaysMissing = false, customJekyll = false, installer,
-  choices = [], holdPicker = false, cleanup,
+  cleanup, readyGate, chooser,
   buildRequired = false, buildConsent = true, buildError, builder, alwaysBuildRequired = false, buildNeedsJekyll = false,
 } = {}) {
   const ready = deferred();
@@ -22,14 +22,19 @@ function fixture({
   const messages = [];
   const opened = [];
   const log = [];
-  const status = { show() { this.hidden = false; }, hide() { this.hidden = true; } };
+  function makeStatus() { return { show() { this.hidden = false; }, hide() { this.hidden = true; } }; }
+  const status = makeStatus();
+  const statuses = [];
+  const outputs = [];
   const contexts = new Map();
   const config = { scheme: 'file', fsPath: '/guide/sushi-config.yaml' };
   let calls = 0;
+  let started = 0;
   let prompts = 0;
   const setupCalls = [];
   const previewCalls = [];
-  const pickers = [];
+  const decorationEvents = [];
+  let decorationProvider;
   let buildPrompts = 0;
   const buildCalls = [];
   const events = [];
@@ -42,30 +47,36 @@ function fixture({
       } }),
     },
     window: {
-      createOutputChannel: () => ({ clear() {}, show() {}, append: (text) => log.push(text), appendLine: (text) => log.push(text) }),
-      createStatusBarItem: () => status,
+      createOutputChannel: (name) => {
+        const entries = [];
+        const output = { name, entries, clear() {}, show() {},
+          append: (text) => { entries.push(text); log.push(text); },
+          appendLine: (text) => { entries.push(text); log.push(text); } };
+        outputs.push(output);
+        return output;
+      },
+      createStatusBarItem: () => {
+        const item = statuses.length === 0 ? status : makeStatus();
+        statuses.push(item);
+        return item;
+      },
       showErrorMessage: async (text) => { messages.push(text); },
       showWarningMessage: async (text) => { messages.push(text); },
-      showQuickPick: async (items, options, token) => {
-        pickers.push({ items, options });
-        const choice = choices.length ? choices.shift() : target;
-        if (holdPicker || choice === 'hold') return new Promise((resolve) => token.onCancellationRequested(() => resolve(undefined)));
-        if (choice === 'cancel') return undefined;
-        if (choice === 'default') return items.filter((item) => item.picked);
-        return choice === 'vscode' ? [items[0]] : [];
+      showQuickPick: () => assert.fail('Preview must not prompt for a destination'),
+      registerFileDecorationProvider(provider) {
+        decorationProvider = provider;
+        return { dispose() {} };
       },
     },
     Uri: { parse: (url) => ({ url }) },
     ViewColumn: { Beside: 2 },
     StatusBarAlignment: { Left: 1 },
-    CancellationTokenSource: class {
-      constructor() {
-        this.listeners = [];
-        this.token = { onCancellationRequested: (listener) => this.listeners.push(listener) };
-      }
-      cancel() { this.listeners.forEach((listener) => listener()); }
-      dispose() { this.listeners = []; }
+    EventEmitter: class {
+      event = () => {};
+      fire(uri) { decorationEvents.push(uri); }
+      dispose() {}
     },
+    ThemeColor: class { constructor(id) { this.id = id; } },
     env: {
       asExternalUri: async (uri) => ({ url: uri.url + 'forwarded' }),
       openExternal: async (uri) => { opened.push({ target: 'browser', uri }); return true; },
@@ -88,7 +99,7 @@ function fixture({
     module, AbortController,
     require(name) {
       if (name === 'vscode') return vscode;
-      if (name === './project') return { chooseConfig: async () => config };
+      if (name === './project') return { chooseConfig: chooser || (async (uri) => uri || config) };
       if (name === './preview-setup') return {
         resolveJekyllPath: (configured) => configured,
         confirmPreviewSetup: async () => { prompts++; return install; },
@@ -105,7 +116,7 @@ function fixture({
         async runPublisherBuild(root, jekyllPath, signal) {
           events.push('build');
           buildCalls.push({ root, jekyllPath, signal });
-          if (builder) await builder(signal);
+          if (builder) await builder(signal, root);
           if (buildError) throw new Error(buildError);
         },
       };
@@ -119,7 +130,7 @@ function fixture({
         async runPreview(options) {
           calls++;
           previewCalls.push({ ...options });
-          if (failed) throw new Error('Missing Publisher build');
+          if (failed === true || failed === options.root) throw new Error('Missing Publisher build');
           if (buildRequired && (buildCalls.length === 0 || alwaysBuildRequired)) {
             throw Object.assign(new Error('Publisher output missing'), { code: 'PUBLISHER_BUILD_REQUIRED' });
           }
@@ -127,7 +138,9 @@ function fixture({
             throw Object.assign(new Error('Jekyll unavailable'), { code: 'JEKYLL_UNAVAILABLE' });
           }
           const cancelled = new Promise((resolve) => options.signal.addEventListener('abort', resolve, { once: true }));
-          await options.onReady('http://127.0.0.1:4000/');
+          const port = 4000 + started++ * 2;
+          if (readyGate) await readyGate;
+          await options.onReady(`http://127.0.0.1:${port}/`);
           ready.resolve(options);
           await cancelled;
           if (cleanup) await cleanup;
@@ -142,13 +155,13 @@ function fixture({
     subscriptions: [], asAbsolutePath: (file) => '/extension/' + file,
   }, () => validating);
   return { preview, ready, stopped, messages, opened, log, status, contexts, setupCalls, previewCalls,
-    pickers, buildCalls, events, getBuildPrompts: () => buildPrompts,
+    config, statuses, outputs, decorationProvider, decorationEvents, buildCalls, events, getBuildPrompts: () => buildPrompts,
     getCalls: () => calls, getPrompts: () => prompts };
 }
 
 test('opens beside the editor after readiness and reuses the running preview', async () => {
-  const { preview, ready, opened, status, getCalls } = fixture({ target: 'vscode' });
-  await preview.start();
+  const { preview, ready, opened, status, getCalls } = fixture();
+  await preview.start(undefined, 'vscode');
   await ready.promise;
   assert.equal(preview.isRunning(), true);
   assert.equal(opened[0].command, 'simpleBrowser.api.open');
@@ -162,38 +175,36 @@ test('opens beside the editor after readiness and reuses the running preview', a
   assert.equal(preview.isRunning(), false);
 });
 
-test('Start and Open default to the browser and allow opting into VS Code for each invocation', async () => {
-  const { preview, ready, opened, pickers, getCalls } = fixture({ choices: ['default', 'vscode', 'default', 'vscode'] });
+test('Start and Open use their explicit destinations without prompting and reuse the server', async () => {
+  const { preview, ready, opened, getCalls } = fixture();
   await preview.start();
   await ready.promise;
-  await preview.open();
-  await preview.start();
-  await preview.open();
+  await preview.open('vscode');
+  await preview.start(undefined, 'browser');
+  await preview.open('vscode');
   assert.deepEqual(opened.map((item) => item.target), ['browser', 'vscode', 'browser', 'vscode']);
-  assert.equal(getCalls(), 1, 'opening again reuses the server');
-  assert.equal(pickers.length, 4, 'starting opens only one picker, including the automatic opening');
-  for (const picker of pickers) {
-    assert.equal(picker.options.canPickMany, true);
-    assert.equal(picker.items[0].label, 'Open in VS Code');
-    assert.equal(picker.items[0].picked, false);
-  }
+  assert.equal(getCalls(), 1);
   await preview.stop();
 });
 
 test('shows running and stopping status and keeps Stop available until cleanup finishes', async () => {
   const cleanup = deferred();
-  const { preview, ready, status, contexts } = fixture({ cleanup: cleanup.promise });
+  const gate = deferred();
+  const { preview, ready, status, contexts } = fixture({ cleanup: cleanup.promise, readyGate: gate.promise });
   assert.equal(contexts.get('fhirIg.previewActive'), false);
   await preview.start();
   assert.equal(contexts.get('fhirIg.previewActive'), true);
   assert.match(status.text, /Starting.*Stop/);
+  gate.resolve();
   await ready.promise;
   assert.equal(status.hidden, false);
   assert.match(status.text, /IG Preview: Running.*Stop/);
-  assert.equal(status.command, 'fhirIg.stopPreview');
+  assert.equal(status.command.command, 'fhirIg.stopPreview');
+  assert.equal(status.command.arguments[0].fsPath, '/guide/sushi-config.yaml');
   assert.match(status.tooltip, /\/guide/);
   assert.match(status.tooltip, /http:\/\/127.0.0.1:4000\//);
   const stopping = preview.stop();
+  await new Promise((resolve) => setImmediate(resolve));
   assert.match(status.text, /IG Preview: Stopping/);
   assert.equal(status.hidden, false);
   assert.equal(contexts.get('fhirIg.previewActive'), true);
@@ -203,54 +214,10 @@ test('shows running and stopping status and keeps Stop available until cleanup f
   assert.equal(contexts.get('fhirIg.previewActive'), false);
 });
 
-test('cancelling the initial checkbox picker starts no server or dependency installer', async () => {
-  const { preview, getCalls, setupCalls, messages, status, contexts } = fixture({ choices: ['cancel'] });
-  await preview.start();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(preview.isRunning(), false);
-  assert.equal(getCalls(), 0);
-  assert.equal(setupCalls.length, 0);
-  assert.equal(messages.length, 0);
-  assert.equal(status.hidden, true);
-  assert.equal(contexts.get('fhirIg.previewActive'), false);
-});
-
-test('cancelling Open leaves the preview running and does not open another view', async () => {
-  const { preview, ready, opened } = fixture({ choices: ['vscode', 'cancel'] });
-  await preview.start();
-  await ready.promise;
-  await preview.open();
-  assert.equal(opened.length, 1);
-  assert.equal(preview.isRunning(), true);
-  await preview.stop();
-});
-
-test('stopping closes a pending checkbox picker', async () => {
-  const { preview, pickers, getCalls, messages } = fixture({ holdPicker: true });
-  await preview.start();
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(pickers.length, 1);
-  await preview.stop();
-  assert.equal(preview.isRunning(), false);
-  assert.equal(getCalls(), 0);
-  assert.equal(messages.length, 0);
-});
-
-test('stopping while Open is choosing a destination cancels both the picker and the server', async () => {
-  const { preview, ready, opened } = fixture({ choices: ['vscode', 'hold'] });
-  await preview.start();
-  await ready.promise;
-  const opening = preview.open();
-  await preview.stop();
-  await opening;
-  assert.equal(opened.length, 1);
-  assert.equal(preview.isRunning(), false);
-});
-
 for (const options of [{ target: 'browser' }, { target: 'vscode', browserError: true }]) {
   test(`opens externally for ${options.target || 'an unavailable VS Code browser'}`, async () => {
     const { preview, ready, opened } = fixture(options);
-    await preview.start();
+    await preview.start(undefined, options.target);
     await ready.promise;
     assert.equal(opened[0].target, 'browser');
     assert.equal(opened[0].uri.url, 'http://127.0.0.1:4000/');
@@ -423,4 +390,211 @@ test('stopping during a full Publisher build cancels it and never opens preview'
   assert.equal(getCalls(), 1);
   assert.equal(opened.length, 0);
   assert.equal(messages.length, 0);
+});
+
+test('decorates only the previewed config after readiness and clears the badge on Stop', async () => {
+  const cleanup = deferred();
+  const { preview, ready, config, decorationProvider, decorationEvents } = fixture({ cleanup: cleanup.promise });
+  assert.equal(decorationProvider.provideFileDecoration(config), undefined);
+  const starting = preview.start(config);
+  assert.equal(decorationProvider.provideFileDecoration(config), undefined);
+  await starting;
+  await ready.promise;
+  const badge = decorationProvider.provideFileDecoration({ ...config });
+  assert.equal(badge.badge, '▶');
+  assert.equal(badge.color.id, 'textLink.foreground');
+  assert.match(badge.tooltip, /http:\/\/127.0.0.1:4000/);
+  assert.equal(badge.propagate, false);
+  assert.equal(decorationProvider.provideFileDecoration({ ...config, fsPath: '/other/sushi-config.yaml' }), undefined);
+  assert.equal(decorationProvider.provideFileDecoration({ ...config, scheme: 'untitled' }), undefined);
+  assert.equal(decorationProvider.provideFileDecoration({ ...config, fsPath: '/guide/input/pagecontent/index.md' }), undefined);
+  assert.deepEqual(decorationEvents, [config]);
+  const stopping = preview.stop();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(decorationProvider.provideFileDecoration(config), undefined);
+  assert.deepEqual(decorationEvents, [config, config]);
+  cleanup.resolve();
+  await stopping;
+  assert.deepEqual(decorationEvents, [config, config, config]);
+});
+
+test('automatic rebuild uses the Publisher pipeline without another build prompt or browser opening', async () => {
+  const building = deferred();
+  const built = deferred();
+  const { preview, ready, buildCalls, getBuildPrompts, opened, status } = fixture({
+    builder: async () => { building.resolve(); await built.promise; },
+  });
+  await preview.start();
+  const options = await ready.promise;
+  const rebuilding = options.rebuild(options.signal);
+  await building.promise;
+  assert.match(status.text, /Building with Publisher/);
+  assert.equal(buildCalls.length, 1);
+  assert.equal(buildCalls[0].root, '/guide');
+  assert.equal(buildCalls[0].jekyllPath, 'jekyll');
+  assert.equal(buildCalls[0].signal, options.signal);
+  assert.equal(getBuildPrompts(), 0);
+  built.resolve();
+  await rebuilding;
+  assert.match(status.text, /IG Preview: Running/);
+  assert.equal(opened.length, 1);
+  await preview.stop();
+});
+
+test('right-click menus expose separate Browser and VS Code actions for both config extensions', () => {
+  const manifest = require('../package.json');
+  for (const menu of ['explorer/context', 'editor/context', 'editor/title/context']) {
+    for (const command of ['fhirIg.startPreview', 'fhirIg.startPreviewInVsCode', 'fhirIg.openPreview', 'fhirIg.openPreviewInVsCode']) {
+      const entry = manifest.contributes.menus[menu].find((item) => item.command === command);
+      assert.ok(entry, `${command} missing from ${menu}`);
+      assert.match(entry.when, /sushi-config.yaml/);
+      assert.match(entry.when, /sushi-config.yml/);
+      const contribution = manifest.contributes.commands.find((item) => item.command === command);
+      assert.match(contribution.title, command.endsWith('InVsCode') ? /in VS Code$/ : /in Browser$/);
+    }
+  }
+});
+
+const otherConfig = { scheme: 'file', fsPath: '/other/sushi-config.yml' };
+
+async function tick() { await new Promise((resolve) => setImmediate(resolve)); }
+
+test('two IGs have separate URLs, menus, statuses, logs and running badges', async (t) => {
+  const { preview, config, opened, previewCalls, statuses, outputs, contexts, decorationProvider } = fixture();
+  t.after(() => preview.deactivate());
+  await preview.start(config);
+  await tick();
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewConfigs')), [config.fsPath]);
+  await preview.start(otherConfig, 'vscode');
+  await tick();
+  assert.equal(previewCalls.length, 2);
+  assert.equal(previewCalls[0].root, '/guide');
+  assert.equal(previewCalls[1].root, '/other');
+  assert.equal(opened[0].uri.url, 'http://127.0.0.1:4000/');
+  assert.equal(opened[1].uri.url, 'http://127.0.0.1:4002/forwarded');
+  assert.match(decorationProvider.provideFileDecoration(config).tooltip, /4000/);
+  assert.match(decorationProvider.provideFileDecoration(otherConfig).tooltip, /4002/);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewConfigs')), [config.fsPath, otherConfig.fsPath]);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewRunningConfigs')), [config.fsPath, otherConfig.fsPath]);
+  assert.equal(statuses.length, 2);
+  assert.equal(statuses[0].command.arguments[0], config);
+  assert.equal(statuses[1].command.arguments[0], otherConfig);
+  previewCalls[0].log('Guide A output');
+  previewCalls[1].log('Guide B output');
+  assert.ok(outputs[0].entries.includes('Guide A output'));
+  assert.ok(!outputs[0].entries.includes('Guide B output'));
+  assert.ok(outputs[1].entries.includes('Guide B output'));
+  assert.ok(!outputs[1].entries.includes('Guide A output'));
+  await preview.open('browser', otherConfig);
+  assert.equal(opened.at(-1).uri.url, 'http://127.0.0.1:4002/');
+  await preview.start(config, 'vscode');
+  assert.equal(opened.at(-1).uri.url, 'http://127.0.0.1:4000/forwarded');
+  assert.equal(previewCalls.length, 2, 'starting the same guide reuses only its own session');
+  await preview.stop(config);
+  assert.equal(previewCalls[0].signal.aborted, true);
+  assert.equal(previewCalls[1].signal.aborted, false);
+  assert.equal(statuses[0].hidden, true);
+  assert.equal(statuses[1].hidden, false);
+  assert.equal(decorationProvider.provideFileDecoration(config), undefined);
+  assert.ok(decorationProvider.provideFileDecoration(otherConfig));
+  assert.equal(contexts.get('fhirIg.previewActive'), true);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewConfigs')), [otherConfig.fsPath]);
+  await preview.start(config);
+  await tick();
+  assert.equal(previewCalls.length, 3);
+  assert.equal(opened.at(-1).uri.url, 'http://127.0.0.1:4004/');
+  assert.equal(outputs.length, 2, 'restarting reuses the guide output channel');
+});
+
+test('Open and Stop on an inactive guide never target another running guide', async (t) => {
+  const { preview, config, opened, previewCalls } = fixture();
+  t.after(() => preview.deactivate());
+  await preview.start(config);
+  await tick();
+  await preview.open('browser', otherConfig);
+  await preview.stop(otherConfig);
+  assert.equal(opened.length, 1);
+  assert.equal(previewCalls[0].signal.aborted, false);
+});
+
+test('concurrent Start commands create only one session for each guide', async (t) => {
+  const { preview, config, previewCalls } = fixture();
+  t.after(() => preview.deactivate());
+  await Promise.all([preview.start(config), preview.start(config), preview.start(otherConfig)]);
+  await tick();
+  assert.equal(previewCalls.length, 2);
+  assert.equal(new Set(previewCalls.map((options) => options.root)).size, 2);
+});
+
+test('a failed guide startup leaves the other preview running and decorated', async (t) => {
+  const { preview, config, previewCalls, contexts, decorationProvider } = fixture({ failed: '/other' });
+  t.after(() => preview.deactivate());
+  await preview.start(config);
+  await tick();
+  await preview.start(otherConfig);
+  await tick();
+  assert.equal(previewCalls[0].signal.aborted, false);
+  assert.ok(decorationProvider.provideFileDecoration(config));
+  assert.equal(decorationProvider.provideFileDecoration(otherConfig), undefined);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewConfigs')), [config.fsPath]);
+});
+
+test('deactivation cancels all IG sessions and clears all indicators', async () => {
+  const { preview, config, previewCalls, contexts, decorationProvider, statuses } = fixture();
+  await preview.start(config);
+  await preview.start(otherConfig);
+  await tick();
+  await preview.deactivate();
+  assert.ok(previewCalls.every((options) => options.signal.aborted));
+  assert.ok(statuses.every((status) => status.hidden));
+  assert.equal(decorationProvider.provideFileDecoration(config), undefined);
+  assert.equal(decorationProvider.provideFileDecoration(otherConfig), undefined);
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewConfigs')), []);
+  assert.deepEqual(Array.from(contexts.get('fhirIg.previewRunningConfigs')), []);
+  assert.equal(preview.isRunning(), false);
+});
+
+test('preview menus use the selected file and the title icon is a broadcast symbol', () => {
+  const manifest = require('../package.json');
+  for (const menu of ['explorer/context', 'editor/context', 'editor/title/context']) {
+    for (const entry of manifest.contributes.menus[menu].filter((item) => item.command.includes('Preview'))) {
+      assert.ok(!entry.when.includes('fhirIg.previewActive'));
+      assert.ok(entry.when.includes(entry.command.includes('startPreview')
+        ? 'resourcePath not in fhirIg.previewConfigs' : 'resourcePath in fhirIg.previewConfigs'));
+    }
+  }
+  assert.equal(manifest.contributes.commands.find((item) => item.command === 'fhirIg.openPreview').icon, '$(radio-tower)');
+  assert.match(manifest.contributes.menus['editor/title'][0].when, /resourcePath in fhirIg.previewRunningConfigs/);
+});
+
+test('deactivation cancels a pending guide selection without starting a server', async () => {
+  const choosing = deferred();
+  const { preview, previewCalls, contexts } = fixture({
+    chooser: async (_uri, signal) => {
+      choosing.resolve();
+      await new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      return undefined;
+    },
+  });
+  const starting = preview.start();
+  await choosing.promise;
+  await preview.deactivate();
+  await starting;
+  assert.equal(previewCalls.length, 0);
+  assert.equal(preview.isRunning(), false);
+  assert.equal(contexts.get('fhirIg.previewActive'), false);
+});
+
+test('fast text refresh reports Jekyll activity without running the Publisher build callback', async () => {
+  const { preview, ready, status, buildCalls, opened } = fixture();
+  await preview.start();
+  const options = await ready.promise;
+  options.onRefresh(true);
+  assert.match(status.text, /Refreshing text/);
+  assert.equal(buildCalls.length, 0);
+  options.onRefresh(false);
+  assert.match(status.text, /IG Preview: Running/);
+  assert.equal(opened.length, 1);
+  await preview.stop();
 });

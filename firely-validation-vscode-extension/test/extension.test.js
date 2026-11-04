@@ -23,6 +23,7 @@ function loadExtension(validateIg, {
 } = {}) {
   const commands = new Map();
   const notifications = [];
+  const opened = [];
   const notificationShown = deferred();
   const pickerShown = deferred();
   const log = [];
@@ -57,6 +58,7 @@ function loadExtension(validateIg, {
     window: {
       createOutputChannel: () => output,
       createStatusBarItem: () => ({ show() {}, hide() {} }),
+      registerFileDecorationProvider: () => ({ dispose() {} }),
       withProgress: (_, task) => task({ report() {} }, {
         onCancellationRequested: () => ({ dispose() {} }),
       }),
@@ -77,16 +79,25 @@ function loadExtension(validateIg, {
       forEach() {},
       set(uri, entries) { diagnosticEntries.push({ uri, entries }); },
     }) },
-    Uri: { file: (fsPath) => ({ fsPath }) },
+    Uri: { file: (fsPath) => ({ fsPath }), parse: (url) => ({ url }) },
+    env: {
+      asExternalUri: async (uri) => uri,
+      openExternal: async (uri) => { opened.push({ target: 'browser', uri }); return true; },
+    },
+    ViewColumn: { Beside: 2 },
     Range: class { constructor(...positions) { this.positions = positions; } },
     Diagnostic: class { constructor(range, message, severity) { Object.assign(this, { range, message, severity }); } },
     DiagnosticSeverity: { Error: 0 },
     commands: {
-      async executeCommand() {},
+      async executeCommand(command, uri) {
+        if (command === 'simpleBrowser.api.open') opened.push({ target: 'vscode', uri });
+      },
       registerCommand: (name, handler) => { commands.set(name, handler); return {}; },
     },
     ProgressLocation: { Notification: 15 },
     StatusBarAlignment: { Left: 1 },
+    EventEmitter: class { event = () => {}; fire() {} dispose() {} },
+    ThemeColor: class { constructor(id) { this.id = id; } },
     CancellationTokenSource: class {
       constructor() {
         this.listeners = [];
@@ -142,7 +153,7 @@ function loadExtension(validateIg, {
     startPreview: commands.get('fhirIg.startPreview'),
     stopPreview: commands.get('fhirIg.stopPreview'),
     deactivate: extension.deactivate,
-    notifications, notificationShown, pickerShown, log, outputShows, commands, diagnosticEntries, setupCalls,
+    notifications, opened, notificationShown, pickerShown, log, outputShows, commands, diagnosticEntries, setupCalls,
   };
 }
 
@@ -320,4 +331,35 @@ test('missing package is reported before SDK tool setup when genonce is skipped'
   assert.equal(calls, 0);
   assert.equal(fixture.setupCalls.length, 0);
   assert.equal(fixture.notifications[0].message, packageError.message);
+});
+
+test('registered preview commands open and stop the IG whose config was clicked', { timeout: 5000 }, async (t) => {
+  const other = { scheme: 'file', fsPath: '/test/other/sushi-config.yml' };
+  const started = [deferred(), deferred()];
+  const signals = new Map();
+  const fixture = loadExtension(async () => passingSummary, {
+    previewWorkflow: async ({ root, signal, onReady }) => {
+      const index = root === '/test/ig' ? 0 : 1;
+      signals.set(root, signal);
+      const cancelled = new Promise((resolve) => signal.addEventListener('abort', resolve, { once: true }));
+      await onReady(`http://127.0.0.1:${4000 + index * 2}/`);
+      started[index].resolve();
+      await cancelled;
+    },
+  });
+  t.after(() => fixture.deactivate());
+  await fixture.startPreview(configUri);
+  await started[0].promise;
+  await fixture.commands.get('fhirIg.startPreviewInVsCode')(other);
+  await started[1].promise;
+  assert.deepEqual(fixture.opened.map((item) => [item.target, item.uri.url]), [
+    ['browser', 'http://127.0.0.1:4000/'], ['vscode', 'http://127.0.0.1:4002/'],
+  ]);
+  await fixture.commands.get('fhirIg.openPreview')(other);
+  assert.equal(fixture.opened.at(-1).uri.url, 'http://127.0.0.1:4002/');
+  await fixture.commands.get('fhirIg.openPreviewInVsCode')(configUri);
+  assert.equal(fixture.opened.at(-1).uri.url, 'http://127.0.0.1:4000/');
+  await fixture.stopPreview(other);
+  assert.equal(signals.get('/test/other').aborted, true);
+  assert.equal(signals.get('/test/ig').aborted, false);
 });

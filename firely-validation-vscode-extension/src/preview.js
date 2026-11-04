@@ -2,16 +2,18 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
+const { createHash } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 const { runProcess, checkCancelled } = require('./process');
+const { narrativeRoots, contentLocation, refreshNarrative } = require('./preview-content');
 
-const IMAGE_FILE = /\.(svg|png|jpe?g|gif|webp|avif|apng|bmp|ico|tiff?|heic|heif)$/i;
-const NARRATIVE_FILE = /\.(md|xml|html|xhtml)$/i;
+// Keep starting sessions from selecting the same ports before Jekyll binds.
+const reservedPorts = new Set();
 
-async function requirePath(file, directory, message, code) {
+async function requireFile(file, message, code) {
   try {
     const stat = await fs.stat(file);
-    if (directory ? stat.isDirectory() : stat.isFile()) return;
+    if (stat.isFile()) return;
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
@@ -19,10 +21,10 @@ async function requirePath(file, directory, message, code) {
 }
 
 async function requirePreviewBuild(root) {
-  const pages = path.join(root, 'temp', 'pages');
-  const message = 'Run a full IG Publisher build first. Live preview needs temp/pages/_config.yml and temp/pages/_includes.';
-  await requirePath(path.join(pages, '_config.yml'), false, message, 'PUBLISHER_BUILD_REQUIRED');
-  await requirePath(path.join(pages, '_includes'), true, message, 'PUBLISHER_BUILD_REQUIRED');
+  const message = 'Run a full IG Publisher build first. Live preview needs output/index.html and output/qa.html.';
+  for (const file of ['index.html', 'qa.html']) {
+    await requireFile(path.join(root, 'output', file), message, 'PUBLISHER_BUILD_REQUIRED');
+  }
 }
 
 async function checkJekyll({ root, jekyllPath = 'jekyll', signal, log = () => {}, run = runProcess }) {
@@ -44,49 +46,86 @@ async function checkJekyll({ root, jekyllPath = 'jekyll', signal, log = () => {}
   }
 }
 
-async function syncContent(source, destinationRoot, log, signal, relative = '', imagesOnly = false) {
-  checkCancelled(signal);
-  const entries = await fs.readdir(path.join(source, relative), { withFileTypes: true }).catch((error) => {
-    if (error.code !== 'ENOENT') throw error;
-    return [];
-  });
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue;
-    const file = path.join(relative, entry.name);
-    if (entry.isDirectory()) {
-      await syncContent(source, destinationRoot, log, signal, file, imagesOnly);
-    } else if (entry.isFile() && (IMAGE_FILE.test(entry.name) || (!imagesOnly && NARRATIVE_FILE.test(entry.name)))) {
+// Watch authored inputs only: Publisher and Jekyll write to output, temp,
+// fsh-generated and caches. Watching those would cause rebuild loops.
+function createSourceSnapshot(root, roots) {
+  let cache = new Map();
+  return async (signal) => {
+    const next = new Map();
+    async function visit(relative) {
       checkCancelled(signal);
-      const destination = path.join(destinationRoot, file);
+      const file = path.join(root, relative);
       try {
-        const content = await fs.readFile(path.join(source, file));
-        const existing = await fs.readFile(destination).catch((error) => {
-          if (error.code !== 'ENOENT') throw error;
-          return undefined;
-        });
-        if (existing?.equals(content)) continue;
-        checkCancelled(signal);
-        await fs.mkdir(path.dirname(destination), { recursive: true });
-        await fs.writeFile(destination, content);
-        if (existing) log(`Updated: ${file}\n`);
-        else if (IMAGE_FILE.test(entry.name)) log(`Added image: ${file}\n`);
-        else log(`New include: ${file}; new pages need a full Publisher build.\n`);
+        const stat = await fs.lstat(file);
+        if (stat.isDirectory()) {
+          const entries = await fs.readdir(file);
+          for (const entry of entries.sort()) {
+            if (!entry.startsWith('.')) await visit(path.join(relative, entry));
+          }
+        } else if (stat.isFile()) {
+          const stamp = `${stat.mtimeMs}:${stat.ctimeMs}:${stat.size}`;
+          const previous = cache.get(relative);
+          const digest = previous?.stamp === stamp ? previous.digest
+            : createHash('sha256').update(await fs.readFile(file)).digest('hex');
+          next.set(relative, { stamp, digest });
+        }
       } catch (error) {
-        // Editors can replace files during a save; retry on the next poll.
+        // Optional inputs and files replaced during a save are checked again.
         if (error.code !== 'ENOENT') throw error;
       }
     }
-  }
+    for (const source of new Set(['input', ...roots, 'sushi-config.yaml', 'sushi-config.yml', 'ig.ini', 'package-list.json'])) {
+      await visit(source);
+    }
+    cache = next;
+    const files = new Map([...next].map(([file, { digest }]) => [file, digest]));
+    return { files, signature: JSON.stringify([...files]) };
+  };
 }
 
 function checkPort(port) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.once('error', (error) => reject(new Error(
-      `Preview port ${port} is unavailable (${error.code}). Stop the other server or change fhirIg.preview.port.`,
-    )));
+    server.once('error', (error) => reject(Object.assign(new Error(
+      `Preview port ${port} is unavailable (${error.code}).`,
+    ), { code: error.code })));
     server.listen(port, '127.0.0.1', () => server.close(resolve));
   });
+}
+
+async function findAvailablePort(start, signal, excludedPort) {
+  for (let port = start; port <= 65535; port++) {
+    checkCancelled(signal);
+    if (port === excludedPort || reservedPorts.has(port)) continue;
+    try {
+      await checkPort(port);
+      if (reservedPorts.has(port)) continue;
+      reservedPorts.add(port);
+      return port;
+    } catch (error) {
+      if (error.code !== 'EADDRINUSE' && error.code !== 'EACCES') throw error;
+    }
+  }
+  throw Object.assign(new Error(`No available preview port from ${start} to 65535.`), {
+    code: 'NO_PREVIEW_PORT_AVAILABLE',
+  });
+}
+
+async function reservePreviewPorts(preferredPort, signal) {
+  const port = await findAvailablePort(preferredPort, signal);
+  try {
+    let reloadPort;
+    try {
+      reloadPort = await findAvailablePort(port + 1, signal);
+    } catch (error) {
+      if (error.code !== 'NO_PREVIEW_PORT_AVAILABLE') throw error;
+      reloadPort = await findAvailablePort(1, signal, port);
+    }
+    return { port, reloadPort };
+  } catch (error) {
+    reservedPorts.delete(port);
+    throw error;
+  }
 }
 
 function responds(url, signal) {
@@ -113,30 +152,23 @@ async function waitForServer(url, signal, timeout) {
 async function runPreview({
   root, port = 4000, jekyllPath = 'jekyll', signal,
   log = () => {}, onReady = async () => {}, run = runProcess,
-  pollInterval = 500, startupTimeout = 120000,
+  rebuild, onRefresh = () => {}, pollInterval = 500, debounceInterval = 500, startupTimeout = 120000,
 }) {
   checkCancelled(signal);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('fhirIg.preview.port must be an integer between 1 and 65535.');
   }
-  const pages = path.join(root, 'temp', 'pages');
-  const includes = path.join(pages, '_includes');
-  const source = path.join(root, 'input', 'pagecontent');
-  const images = path.join(root, 'input', 'images');
-  async function syncFiles(watchSignal) {
-    await syncContent(source, includes, log, watchSignal);
-    // Publisher copies input/images to the site root, preserving subdirectories.
-    // This folder is optional and may be created while preview is running.
-    await syncContent(images, pages, log, watchSignal, '', true);
-  }
+  const source = path.join(root, 'output');
   await requirePreviewBuild(root);
-  await requirePath(source, true, 'This guide has no input/pagecontent directory to preview.');
+  const roots = await narrativeRoots(root);
+  const snapshot = createSourceSnapshot(root, roots);
+  let builtSources = await snapshot(signal);
   await checkJekyll({ root, jekyllPath, signal, log, run });
-  const reloadPort = port === 65535 ? port - 1 : port + 1;
-  await checkPort(port);
-  await checkPort(reloadPort);
-  checkCancelled(signal);
-  await syncFiles(signal);
+  await refreshNarrative({ root, roots, files: [...builtSources.files.keys()], jekyllPath, signal, log, run });
+  const preferredPort = port;
+  const ports = await reservePreviewPorts(preferredPort, signal);
+  port = ports.port;
+  const { reloadPort } = ports;
 
   const controller = new AbortController();
   const abort = () => controller.abort();
@@ -146,10 +178,14 @@ async function runPreview({
   let completion;
   let watching;
   try {
+    checkCancelled(signal);
+    if (port !== preferredPort) log(`Preview port ${preferredPort} is unavailable. Using port ${port}.\n`);
+    // Publisher can replace output entirely. Polling keeps Jekyll watching the
+    // path after replacement instead of retaining a watch on the old directory.
     completion = run(jekyllPath, [
-      'serve', '--source', pages, '--destination', path.join(root, 'temp', 'preview'),
+      'serve', '--source', source, '--destination', path.join(root, 'temp', 'preview'),
       '--host', '127.0.0.1', '--port', String(port), '--baseurl', '',
-      '--livereload', '--livereload-port', String(reloadPort),
+      '--livereload', '--livereload-port', String(reloadPort), '--force_polling',
     ], {
       cwd: root, signal: controller.signal, onOutput: log, processGroup: true,
     }).then((result) => ({ result }), (error) => ({ error }));
@@ -157,12 +193,47 @@ async function runPreview({
       throw error || new Error(`Jekyll stopped (exit ${result.code}). See the MedCom IG Preview output for details.`);
     });
     await Promise.race([waitForServer(url, controller.signal, startupTimeout), exited]);
-    log(`\nPreview: ${url}\nWatching input/pagecontent and input/images. Save to refresh the preview.\n`);
-    log('New/deleted pages, navigation, and FHIR changes need a full Publisher build.\n');
+    log(`\nPreview: ${url}\nWatching narrative pages, resource intros/notes, includes and images for fast refresh. FHIR and configuration changes use Publisher.\n`);
     async function watch() {
+      let pending;
+      let changedAt;
       while (true) {
         await delay(pollInterval, undefined, { signal: controller.signal });
-        await syncFiles(controller.signal);
+        const current = await snapshot(controller.signal);
+        if (current.signature === builtSources.signature) {
+          pending = undefined;
+          continue;
+        }
+        if (current.signature !== pending) {
+          pending = current.signature;
+          changedAt = Date.now();
+        }
+        if (Date.now() - changedAt < debounceInterval) continue;
+        const changed = [...new Set([...builtSources.files.keys(), ...current.files.keys()])]
+          .filter((file) => builtSources.files.get(file) !== current.files.get(file));
+        // Serialize refreshes, keeping the pre-render snapshot so saves made
+        // while Jekyll or Publisher runs are picked up on the next poll.
+        builtSources = current;
+        pending = undefined;
+        const textOnly = changed.every((file) => contentLocation(file, roots));
+        log(textOnly ? '\nRefreshing text and images without IG Publisher...\n'
+          : '\nFHIR or configuration files changed. Rebuilding with IG Publisher...\n');
+        try {
+          if (textOnly) {
+            onRefresh(true);
+            await refreshNarrative({ root, roots, files: changed, jekyllPath, signal: controller.signal, log, run });
+          } else {
+            await rebuild(controller.signal);
+            checkCancelled(controller.signal);
+            await requirePreviewBuild(root);
+            log('Publisher rebuild complete. Refreshing live preview.\n');
+          }
+        } catch (error) {
+          checkCancelled(controller.signal);
+          log(`${textOnly ? 'Text refresh' : 'Publisher rebuild'} failed: ${error.message}\nEdit a source file to retry.\n`);
+        } finally {
+          if (textOnly && !controller.signal.aborted) onRefresh(false);
+        }
       }
     }
     watching = watch();
@@ -174,8 +245,10 @@ async function runPreview({
   } finally {
     controller.abort();
     await Promise.allSettled([completion, watching]);
+    reservedPorts.delete(port);
+    reservedPorts.delete(reloadPort);
     signal?.removeEventListener('abort', abort);
   }
 }
 
-module.exports = { runPreview, syncContent, requirePreviewBuild, checkJekyll };
+module.exports = { runPreview, requirePreviewBuild, checkJekyll };

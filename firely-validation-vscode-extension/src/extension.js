@@ -129,9 +129,11 @@ function activate(context) {
     ui.diagnostics,
     vscode.commands.registerCommand('fhirIg.validate', (uri) => startValidation(uri, ui)),
     vscode.commands.registerCommand('fhirIg.validateSdk', (uri) => startValidation(uri, ui, true)),
-    vscode.commands.registerCommand('fhirIg.startPreview', (uri) => preview.start(uri)),
-    vscode.commands.registerCommand('fhirIg.stopPreview', () => preview.stop()),
-    vscode.commands.registerCommand('fhirIg.openPreview', () => preview.open()),
+    vscode.commands.registerCommand('fhirIg.startPreview', (uri) => preview.start(uri, 'browser')),
+    vscode.commands.registerCommand('fhirIg.startPreviewInVsCode', (uri) => preview.start(uri, 'vscode')),
+    vscode.commands.registerCommand('fhirIg.stopPreview', (uri) => preview.stop(uri)),
+    vscode.commands.registerCommand('fhirIg.openPreview', (uri) => preview.open('browser', uri)),
+    vscode.commands.registerCommand('fhirIg.openPreviewInVsCode', (uri) => preview.open('vscode', uri)),
   );
 }
 

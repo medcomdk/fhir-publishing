@@ -3,7 +3,7 @@
   "displayName": "MedCom Firely Validation",
   "description": "Firely validation and live narrative preview for FHIR implementation guides.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {
@@ -53,7 +53,12 @@
       },
       {
         "command": "fhirIg.startPreview",
-        "title": "MedCom IG Preview: Start Live Preview",
+        "title": "MedCom IG Preview: Start Live Preview in Browser",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "fhirIg.startPreviewInVsCode",
+        "title": "MedCom IG Preview: Start Live Preview in VS Code",
         "enablement": "isWorkspaceTrusted"
       },
       {
@@ -62,7 +67,13 @@
       },
       {
         "command": "fhirIg.openPreview",
-        "title": "MedCom IG Preview: Open Live Preview",
+        "title": "MedCom IG Preview: Open Live Preview in Browser",
+        "enablement": "isWorkspaceTrusted",
+        "icon": "$(radio-tower)"
+      },
+      {
+        "command": "fhirIg.openPreviewInVsCode",
+        "title": "MedCom IG Preview: Open Live Preview in VS Code",
         "enablement": "isWorkspaceTrusted"
       }
     ],
@@ -70,24 +81,54 @@
       "editor/context": [
         {
           "command": "fhirIg.startPreview",
-          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.startPreviewInVsCode",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         },
         {
           "command": "fhirIg.stopPreview",
-          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreview",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreviewInVsCode",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         }
       ],
       "editor/title/context": [
         {
           "command": "fhirIg.startPreview",
-          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.startPreviewInVsCode",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         },
         {
           "command": "fhirIg.stopPreview",
-          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreview",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreviewInVsCode",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         }
       ],
@@ -104,12 +145,34 @@
         },
         {
           "command": "fhirIg.startPreview",
-          "when": "!fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.startPreviewInVsCode",
+          "when": "resourcePath not in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         },
         {
           "command": "fhirIg.stopPreview",
-          "when": "fhirIg.previewActive && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreview",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        },
+        {
+          "command": "fhirIg.openPreviewInVsCode",
+          "when": "resourcePath in fhirIg.previewConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "fhirIg.openPreview",
+          "when": "resourcePath in fhirIg.previewRunningConfigs && (resourceFilename == sushi-config.yaml || resourceFilename == sushi-config.yml)",
           "group": "navigation"
         }
       ]
@@ -153,7 +216,7 @@
           "minimum": 1,
           "maximum": 65535,
           "scope": "resource",
-          "description": "Live preview HTTP port. The adjacent port is used for LiveReload and must also be available."
+          "description": "Preferred live preview HTTP port. Occupied ports are skipped automatically. LiveReload uses the next available port."
         }
       }
     }

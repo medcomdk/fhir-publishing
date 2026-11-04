@@ -43,7 +43,7 @@ function confirmPreviewSetup(signal) {
 
 function confirmPublisherBuild(signal) {
   return confirmPreviewAction(signal,
-    'The Publisher files needed for live preview are missing. Run a full IG Publisher build now? ' +
+    'The complete Publisher output or cached Jekyll inputs needed for live preview are missing. Run a full IG Publisher build now? ' +
     'This uses this guide\'s _genonce script and may take several minutes.',
     'Run Full Publisher Build');
 }

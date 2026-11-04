@@ -20,8 +20,8 @@ async function runPublisherBuild(root, jekyllPath, signal) {
     ? { PATH: `${path.dirname(jekyllPath)}${windows ? ';' : ':'}${process.env.PATH || ''}` }
     : undefined;
   const task = new vscode.Task(
-    { type: 'fhirIg.publisherBuild' }, vscode.TaskScope.Workspace,
-    'Full IG Publisher build', 'MedCom IG Preview',
+    { type: 'fhirIg.publisherBuild', root }, vscode.TaskScope.Workspace,
+    `Full IG Publisher build (${path.basename(root)})`, 'MedCom IG Preview',
     new vscode.ProcessExecution(windows ? 'cmd.exe' : 'bash',
       windows ? ['/d', '/c', script] : [`./${script}`], { cwd: root, env }),
   );

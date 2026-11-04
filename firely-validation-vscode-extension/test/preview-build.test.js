@@ -30,8 +30,9 @@ async function fixture(t, { platform = 'linux', exitCode = 0, output = true, mis
         execution = { task, terminate() { listener?.({ execution, exitCode: undefined }); } };
         if (!hold) {
           if (output) {
-            await fs.mkdir(path.join(root, 'temp', 'pages', '_includes'), { recursive: true });
-            await fs.writeFile(path.join(root, 'temp', 'pages', '_config.yml'), 'title: Full build\n');
+            await fs.mkdir(path.join(root, 'output'), { recursive: true });
+            await fs.writeFile(path.join(root, 'output', 'index.html'), 'Full build');
+            await fs.writeFile(path.join(root, 'output', 'qa.html'), 'QA report');
           }
           queueMicrotask(() => listener?.({ execution, exitCode }));
         }
@@ -70,6 +71,8 @@ for (const platform of ['linux', 'darwin', 'win32']) {
     await build.runPublisherBuild(build.root, jekyll);
     const task = build.getExecution().task;
     assert.equal(task.definition.type, 'fhirIg.publisherBuild');
+    assert.equal(task.definition.root, build.root);
+    assert.ok(task.name.includes(path.basename(build.root)));
     assert.equal(task.execution.command, platform === 'win32' ? 'cmd.exe' : 'bash');
     assert.deepEqual(Array.from(task.execution.args), platform === 'win32' ? ['/d', '/c', '_genonce.bat'] : ['./_genonce.sh']);
     assert.equal(task.execution.options.cwd, build.root);
