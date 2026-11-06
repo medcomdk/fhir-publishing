@@ -1,15 +1,15 @@
 {
-  "name": "fhir-ig-firely-validator",
-  "displayName": "MedCom Firely Validation",
-  "description": "Firely validation and live narrative preview for FHIR implementation guides.",
+  "name": "medcom-fhir-ig-helper",
+  "displayName": "MedCom FHIR IG Helper",
+  "description": "Firely validation, SDK validation and live preview for FHIR implementation guides.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {
     "type": "git",
     "url": "https://github.com/medcomdk/fhir-publishing.git",
-    "directory": "firely-validation-vscode-extension"
+    "directory": "fhir-ig-helper-vscode-extension"
   },
   "engines": {
     "vscode": "^1.85.0",
@@ -19,6 +19,7 @@
     "Other"
   ],
   "keywords": [
+    "MEDCOM",
     "FHIR",
     "SUSHI",
     "Firely",
@@ -43,37 +44,37 @@
     "commands": [
       {
         "command": "fhirIg.validate",
-        "title": "MedCom Firely Validation: Build and Validate",
+        "title": "MedCom FHIR IG Helper: Build and Validate",
         "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "fhirIg.validateSdk",
-        "title": "MedCom Firely Validation: Validate with SDK",
+        "title": "MedCom FHIR IG Helper: Validate with SDK",
         "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "fhirIg.startPreview",
-        "title": "MedCom IG Preview: Start Live Preview in Browser",
+        "title": "MedCom FHIR IG Helper: Start Live Preview in Browser",
         "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "fhirIg.startPreviewInVsCode",
-        "title": "MedCom IG Preview: Start Live Preview in VS Code",
+        "title": "MedCom FHIR IG Helper: Start Live Preview in VS Code",
         "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "fhirIg.stopPreview",
-        "title": "MedCom IG Preview: Stop Live Preview"
+        "title": "MedCom FHIR IG Helper: Stop Live Preview"
       },
       {
         "command": "fhirIg.openPreview",
-        "title": "MedCom IG Preview: Open Live Preview in Browser",
+        "title": "MedCom FHIR IG Helper: Open Live Preview in Browser",
         "enablement": "isWorkspaceTrusted",
         "icon": "$(radio-tower)"
       },
       {
         "command": "fhirIg.openPreviewInVsCode",
-        "title": "MedCom IG Preview: Open Live Preview in VS Code",
+        "title": "MedCom FHIR IG Helper: Open Live Preview in VS Code",
         "enablement": "isWorkspaceTrusted"
       }
     ],
@@ -178,7 +179,7 @@
       ]
     },
     "configuration": {
-      "title": "MedCom Firely Validation",
+      "title": "MedCom FHIR IG Helper",
       "properties": {
         "fhirIg.sushiPath": {
           "type": "string",

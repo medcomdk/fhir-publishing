@@ -37,6 +37,7 @@ function fixture({
   let decorationProvider;
   let buildPrompts = 0;
   const buildCalls = [];
+  const rebuildPrompts = [];
   const events = [];
   const vscode = {
     workspace: {
@@ -104,6 +105,7 @@ function fixture({
         resolveJekyllPath: (configured) => configured,
         confirmPreviewSetup: async () => { prompts++; return install; },
         confirmPublisherBuild: async () => { buildPrompts++; return buildConsent; },
+        confirmPublisherRebuild: async (files, signal) => { rebuildPrompts.push({ files, signal }); return buildConsent; },
         async runPreviewSetup(script, cwd, signal) {
           events.push('install');
           setupCalls.push({ script, cwd, signal });
@@ -155,7 +157,7 @@ function fixture({
     subscriptions: [], asAbsolutePath: (file) => '/extension/' + file,
   }, () => validating);
   return { preview, ready, stopped, messages, opened, log, status, contexts, setupCalls, previewCalls,
-    config, statuses, outputs, decorationProvider, decorationEvents, buildCalls, events, getBuildPrompts: () => buildPrompts,
+    config, statuses, outputs, decorationProvider, decorationEvents, buildCalls, rebuildPrompts, events, getBuildPrompts: () => buildPrompts,
     getCalls: () => calls, getPrompts: () => prompts };
 }
 
@@ -418,14 +420,18 @@ test('decorates only the previewed config after readiness and clears the badge o
   assert.deepEqual(decorationEvents, [config, config, config]);
 });
 
-test('automatic rebuild uses the Publisher pipeline without another build prompt or browser opening', async () => {
+test('wires changed-file confirmation and runs the confirmed rebuild without reopening the browser', async () => {
   const building = deferred();
   const built = deferred();
-  const { preview, ready, buildCalls, getBuildPrompts, opened, status } = fixture({
+  const { preview, ready, buildCalls, rebuildPrompts, getBuildPrompts, opened, status } = fixture({
     builder: async () => { building.resolve(); await built.promise; },
   });
   await preview.start();
   const options = await ready.promise;
+  const files = ['input/fsh/profile.fsh', 'sushi-config.yaml'];
+  assert.equal(await options.requestRebuild(files, options.signal), true);
+  assert.deepEqual(rebuildPrompts, [{ files, signal: options.signal }]);
+  assert.equal(buildCalls.length, 0);
   const rebuilding = options.rebuild(options.signal);
   await building.promise;
   assert.match(status.text, /Building with Publisher/);

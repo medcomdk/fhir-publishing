@@ -12,11 +12,11 @@ $dataHome = if ([string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
 } else {
     $env:LOCALAPPDATA
 }
-$installRoot = Join-Path $dataHome 'medcom-firely-validation'
+$installRoot = Join-Path $dataHome 'medcom-fhir-ig-helper'
 $binDir = Join-Path $installRoot 'bin'
 $dotnetDir = Join-Path $installRoot 'dotnet'
 $nodeDir = Join-Path $installRoot 'node'
-$tempDir = Join-Path ([IO.Path]::GetTempPath()) ("medcom-firely-validation-" + [Guid]::NewGuid().ToString('N'))
+$tempDir = Join-Path ([IO.Path]::GetTempPath()) ("medcom-fhir-ig-helper-" + [Guid]::NewGuid().ToString('N'))
 
 function Write-Step([string] $Message) {
     Write-Host "==> $Message"
@@ -159,7 +159,7 @@ try {
     if (-not $SdkOnly) { Invoke-Checked 'fhir' @('--version') }
     Invoke-Checked ((Get-Command npm -ErrorAction Stop).Source) @('--version')
     Invoke-Checked ((Get-Command sushi -ErrorAction Stop).Source) @('--version')
-    Write-Step 'Firely validation tools are ready.'
+    Write-Step 'MedCom FHIR IG Helper validation tools are ready.'
 } finally {
     if (Test-Path $tempDir) {
         Remove-Item -LiteralPath $tempDir -Recurse -Force

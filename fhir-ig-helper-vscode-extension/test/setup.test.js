@@ -85,7 +85,7 @@ test('uses local application data for tools installed on Windows', () => {
   const setup = loadSetup();
   const localData = 'C:\\Users\\OLW\\AppData\\Local';
   const paths = setup.toolPaths('C:\\Users\\OLW', { LOCALAPPDATA: localData }, 'win32');
-  const installRoot = path.join(localData, 'medcom-firely-validation');
+  const installRoot = path.join(localData, 'medcom-fhir-ig-helper');
   assert.equal(paths.userBin, path.join(installRoot, 'bin'));
   assert.equal(paths.nodeBin, path.join(installRoot, 'node'));
   assert.equal(paths.dotnetBin, path.join(installRoot, 'dotnet'));

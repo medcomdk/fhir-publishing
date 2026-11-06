@@ -9,7 +9,7 @@ function toolPaths(home = os.homedir(), environment = process.env, platform = pr
   const dataHome = windows
     ? environment.LOCALAPPDATA || path.join(home, 'AppData', 'Local')
     : environment.XDG_DATA_HOME || path.join(home, '.local', 'share');
-  const installRoot = path.join(dataHome, 'medcom-firely-validation');
+  const installRoot = path.join(dataHome, 'medcom-fhir-ig-helper');
   return {
     userBin: windows ? path.join(installRoot, 'bin') : path.join(home, '.local', 'bin'),
     nodeBin: windows ? path.join(installRoot, 'node') : path.join(installRoot, 'node', 'bin'),
@@ -70,7 +70,7 @@ async function runToolSetup(scriptPath, cwd, signal, sdkOnly = false) {
     { type: 'fhirIg.setup' },
     vscode.TaskScope.Workspace,
     'Check validation tools',
-    'MedCom Firely Validation',
+    'MedCom FHIR IG Helper',
     new vscode.ProcessExecution(executable, args, { cwd }),
   );
   task.presentationOptions = {

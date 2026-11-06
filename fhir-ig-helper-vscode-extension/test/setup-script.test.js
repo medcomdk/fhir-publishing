@@ -50,7 +50,7 @@ test(`setup exits without installing when every tool is available (SDK only: ${s
     },
   });
 
-  assert.match(stdout, /Firely validation tools are ready/);
+  assert.match(stdout, /MedCom FHIR IG Helper validation tools are ready/);
   assert.doesNotMatch(stdout, /Installing/);
 });
 }

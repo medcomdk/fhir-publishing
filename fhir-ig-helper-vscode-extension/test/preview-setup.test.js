@@ -12,7 +12,24 @@ function fixture({ platform = 'linux', exitCode = 0, holdTask = false, holdPromp
   let execution;
   let choose;
   let prompts = 0;
+  const notifications = [];
+  const statuses = [];
+  const commands = new Map();
+  function showMessage(severity, message, ...actions) {
+    const [action] = actions;
+    notifications.push({ severity, message, actions });
+    prompts++;
+    if (holdPrompt) return new Promise((resolve) => { choose = resolve; });
+    return Promise.resolve(consent ? action : 'Not Now');
+  }
   const vscode = {
+    StatusBarAlignment: { Right: 2 },
+    commands: {
+      registerCommand(command, callback) {
+        commands.set(command, callback);
+        return { dispose() { commands.delete(command); } };
+      },
+    },
     Task: class {
       constructor(definition, scope, name, source, execution) { Object.assign(this, { definition, scope, name, source, execution }); }
     },
@@ -29,10 +46,14 @@ function fixture({ platform = 'linux', exitCode = 0, holdTask = false, holdPromp
       },
     },
     window: {
-      showInformationMessage: (message, action) => {
-        prompts++;
-        if (holdPrompt) return new Promise((resolve) => { choose = resolve; });
-        return Promise.resolve(consent ? action : 'Not Now');
+      showInformationMessage: (...args) => showMessage('info', ...args),
+      showWarningMessage: (...args) => showMessage('warning', ...args),
+      createStatusBarItem(alignment) {
+        const status = { alignment, visible: false, disposed: false,
+          show() { this.visible = true; },
+          dispose() { this.visible = false; this.disposed = true; } };
+        statuses.push(status);
+        return status;
       },
     },
   };
@@ -46,16 +67,17 @@ function fixture({ platform = 'linux', exitCode = 0, holdTask = false, holdPromp
     },
   }, { filename: file });
   return { ...module.exports, getExecution: () => execution, getPrompts: () => prompts,
+    notifications, statuses, commands,
     choose: (value) => choose(value), hasListener: () => !!listener };
 }
 
-test('keeps managed preview dependencies outside the validation tool directory', () => {
+test('keeps managed preview dependencies in their own helper subdirectory', () => {
   const setup = fixture();
   const unix = setup.previewPaths('/user', { XDG_DATA_HOME: '/data' }, 'linux');
-  assert.equal(unix.root, path.join('/data', 'medcom-ig-preview'));
+  assert.equal(unix.root, path.join('/data', 'medcom-fhir-ig-helper', 'preview'));
   assert.equal(unix.jekyll, path.join(unix.root, 'bin', 'jekyll'));
   const windows = setup.previewPaths('/user', { LOCALAPPDATA: '/local' }, 'win32');
-  assert.equal(windows.root, path.join('/local', 'medcom-ig-preview'));
+  assert.equal(windows.root, path.join('/local', 'medcom-fhir-ig-helper', 'preview'));
   assert.equal(windows.jekyll, path.join(windows.root, 'bin', 'jekyll.cmd'));
 });
 
@@ -142,4 +164,79 @@ test('stopping dismisses a pending Publisher build choice and ignores late conse
   assert.equal(await choice, false);
   setup.choose('Run Full Publisher Build');
   assert.equal(await choice, false);
+});
+
+test('genonce rebuild offers notification buttons and a status bar action with exact filenames', async () => {
+  for (const consent of [true, false]) {
+    const setup = fixture({ consent });
+    const files = ['input/fsh/profile.fsh', 'sushi-config.yaml', 'input/resources/example.json'];
+    assert.equal(await setup.confirmPublisherRebuild(files), consent);
+    const { severity, message, actions } = setup.notifications[0];
+    assert.equal(severity, 'warning');
+    for (const file of files) {
+      assert.ok(message.includes(file));
+      assert.ok(setup.statuses[0].tooltip.includes(file));
+    }
+    assert.match(message, /require a full genonce rebuild/);
+    assert.deepEqual(actions, ['Run Full genonce Rebuild', 'Not Now']);
+    assert.equal(setup.statuses[0].disposed, true);
+    assert.equal(setup.commands.size, 0);
+  }
+});
+
+test('hiding a rebuild notification leaves a clickable status bar action until an explicit choice', async () => {
+  const setup = fixture({ holdPrompt: true });
+  let settled = false;
+  const confirmation = setup.confirmPublisherRebuild(['sushi-config.yaml']);
+  void confirmation.then(() => { settled = true; });
+  setup.choose(undefined);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  const status = setup.statuses[0];
+  assert.equal(status.alignment, 2);
+  assert.equal(status.visible, true);
+  assert.match(status.text, /Run Full genonce Rebuild/);
+  setup.commands.get(status.command)();
+  assert.equal(await confirmation, true);
+  assert.equal(status.disposed, true);
+  assert.equal(setup.commands.size, 0);
+});
+
+test('an already cancelled rebuild never shows a notification', () => {
+  const setup = fixture();
+  const controller = new AbortController();
+  controller.abort();
+  assert.throws(() => setup.confirmPublisherRebuild(['sushi-config.yaml'], controller.signal), { name: 'AbortError' });
+  assert.equal(setup.notifications.length, 0);
+  assert.equal(setup.statuses.length, 0);
+});
+
+test('stopping clears the rebuild action and ignores late notification and status bar consent', async () => {
+  const setup = fixture({ holdPrompt: true });
+  const controller = new AbortController();
+  const choice = setup.confirmPublisherRebuild(['sushi-config.yaml'], controller.signal);
+  const status = setup.statuses[0];
+  const click = setup.commands.get(status.command);
+  controller.abort();
+  assert.equal(await choice, false);
+  assert.equal(status.disposed, true);
+  assert.equal(setup.commands.size, 0);
+  setup.choose('Run Full genonce Rebuild');
+  click();
+  assert.equal(await choice, false);
+});
+
+test('simultaneous guide rebuild prompts have independent actions and cancellation', async () => {
+  const setup = fixture({ holdPrompt: true });
+  const firstController = new AbortController();
+  const first = setup.confirmPublisherRebuild(['input/fsh/profile.fsh'], firstController.signal);
+  const second = setup.confirmPublisherRebuild(['sushi-config.yml']);
+  const [firstStatus, secondStatus] = setup.statuses;
+  assert.notEqual(firstStatus.command, secondStatus.command);
+  firstController.abort();
+  assert.equal(await first, false);
+  assert.equal(secondStatus.visible, true);
+  setup.commands.get(secondStatus.command)();
+  assert.equal(await second, true);
+  assert.equal(setup.commands.size, 0);
 });

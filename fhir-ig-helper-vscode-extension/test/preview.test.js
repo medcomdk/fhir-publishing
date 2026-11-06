@@ -92,6 +92,7 @@ async function runningPreview(t, project, overrides = {}) {
       }), { once: true }));
     },
     onReady: opened,
+    requestRebuild: async () => true,
     ...overrides,
   });
   const stopped = assert.rejects(completion, { name: 'AbortError' });
@@ -197,11 +198,13 @@ test('serves the complete output without requiring narrative inputs or intermedi
   assert.equal(preview.isClosed(), true);
 });
 
-test('rebuilds FHIR and configuration changes while ignoring generated files', { timeout: 10000 }, async (t) => {
+test('requests consent with exact FHIR and configuration paths while ignoring generated files', { timeout: 10000 }, async (t) => {
   const project = await fixture(t);
   const { root, source } = project;
   let builds = 0;
+  const prompts = [];
   const preview = await runningPreview(t, project, {
+    requestRebuild: async (files) => { prompts.push(files); return true; },
     rebuild: async () => {
       builds++;
       for (const directory of ['output', 'temp/pages', 'fsh-generated/resources', 'input-cache']) {
@@ -220,13 +223,134 @@ test('rebuilds FHIR and configuration changes while ignoring generated files', {
     const previous = builds;
     await fs.writeFile(path.join(root, file), content);
     await waitUntil(() => builds === previous + 1);
+    assert.deepEqual(prompts.at(-1), [path.normalize(file)]);
   }
   const previous = builds;
   await fs.rm(path.join(root, 'input', 'fsh', 'profile.fsh'));
   await waitUntil(() => builds === previous + 1);
+  assert.deepEqual(prompts.at(-1), [path.join('input', 'fsh', 'profile.fsh')]);
   await fs.writeFile(path.join(root, 'sushi-config.yaml'), 'id: example');
   await new Promise((resolve) => setTimeout(resolve, 100));
   assert.equal(builds, previous + 1, 'identical saves and generated output must not rebuild');
+  await preview.stop();
+});
+
+test('waits for affirmative consent before rebuilding a batch of changed files', { timeout: 5000 }, async (t) => {
+  const project = await fixture(t);
+  let builds = 0;
+  let choose;
+  const prompts = [];
+  const preview = await runningPreview(t, project, {
+    debounceInterval: 100,
+    requestRebuild: (files, signal) => {
+      prompts.push(files);
+      return new Promise((resolve) => {
+        choose = resolve;
+        signal.addEventListener('abort', () => resolve(false), { once: true });
+      });
+    },
+    rebuild: async () => { builds++; },
+  });
+  await fs.mkdir(path.join(project.root, 'input', 'fsh'), { recursive: true });
+  await fs.writeFile(path.join(project.root, 'input', 'fsh', 'profile.fsh'), 'Profile: Example');
+  await fs.writeFile(path.join(project.root, 'sushi-config.yaml'), 'id: example');
+  await waitUntil(() => prompts.length === 1);
+  assert.deepEqual(prompts[0], [path.join('input', 'fsh', 'profile.fsh'), 'sushi-config.yaml']);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(builds, 0);
+  choose(true);
+  await waitUntil(() => builds === 1);
+  await preview.stop();
+});
+
+test('postpones declined rebuilds without repeat prompts and remembers files for the next request', { timeout: 5000 }, async (t) => {
+  const project = await fixture(t);
+  let builds = 0;
+  const prompts = [];
+  const preview = await runningPreview(t, project, {
+    requestRebuild: async (files) => { prompts.push(files); return prompts.length > 1; },
+    rebuild: async () => { builds++; },
+  });
+  await fs.writeFile(path.join(project.root, 'sushi-config.yaml'), 'id: example');
+  await waitUntil(() => prompts.length === 1);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(builds, 0);
+  assert.equal(prompts.length, 1);
+  await fs.writeFile(path.join(project.source, 'index.md'), 'Text still refreshes');
+  await waitUntil(async () => (await fs.readFile(path.join(project.root, 'output', 'index.html'), 'utf8')) === 'Text still refreshes');
+  assert.equal(prompts.length, 1);
+  await fs.writeFile(path.join(project.root, 'ig.ini'), '[IG]');
+  await waitUntil(() => builds === 1);
+  assert.deepEqual(prompts[1], ['ig.ini', 'sushi-config.yaml']);
+  await fs.writeFile(path.join(project.root, 'ig.ini'), '[IG]\nig = changed');
+  await waitUntil(() => builds === 2);
+  assert.deepEqual(prompts[2], ['ig.ini']);
+  await preview.stop();
+});
+
+test('detects nested FSH edits and refreshes text while a rebuild choice is still pending', { timeout: 5000 }, async (t) => {
+  const project = await fixture(t);
+  const profile = path.join('input', 'fsh', 'profiles', 'Example.fsh');
+  await fs.mkdir(path.dirname(path.join(project.root, profile)), { recursive: true });
+  await fs.writeFile(path.join(project.root, profile), 'Profile: Before');
+  const prompts = [];
+  let builds = 0;
+  let choose;
+  const preview = await runningPreview(t, project, {
+    requestRebuild: (files) => {
+      prompts.push(files);
+      return new Promise((resolve) => { choose = resolve; });
+    },
+    rebuild: async () => { builds++; },
+  });
+  await fs.writeFile(path.join(project.root, 'sushi-config.yaml'), 'id: example');
+  await waitUntil(() => prompts.length === 1);
+  await fs.writeFile(path.join(project.root, profile), 'Profile: After');
+  await waitUntil(() => preview.log.some((line) => line.includes('requires confirmation') && line.includes(profile)));
+  assert.equal(builds, 0);
+  assert.equal(prompts.length, 1, 'keep one request open while continuing to monitor files');
+  await fs.writeFile(path.join(project.source, 'index.md'), 'Text refresh while waiting');
+  await waitUntil(async () => (await fs.readFile(path.join(project.root, 'output', 'index.html'), 'utf8')) === 'Text refresh while waiting');
+  choose(false);
+  await waitUntil(() => prompts.length === 2);
+  assert.deepEqual(prompts[1], [profile, 'sushi-config.yaml']);
+  choose(true);
+  await waitUntil(() => builds === 1);
+  await preview.stop();
+});
+
+test('FSH edits, renames and deletions each request a rebuild after dismissing the previous prompt', { timeout: 5000 }, async (t) => {
+  const project = await fixture(t);
+  const profile = path.join('input', 'fsh', 'profiles', 'Example.fsh');
+  const renamed = path.join('input', 'fsh', 'profiles', 'Renamed.fsh');
+  await fs.mkdir(path.dirname(path.join(project.root, profile)), { recursive: true });
+  await fs.writeFile(path.join(project.root, profile), 'Profile: Before');
+  const prompts = [];
+  const preview = await runningPreview(t, project, {
+    requestRebuild: async (files) => { prompts.push(files); return false; },
+    rebuild: async () => assert.fail('FSH changes must never rebuild without consent'),
+  });
+  await fs.writeFile(path.join(project.root, profile), 'Profile: After');
+  await waitUntil(() => prompts.length === 1);
+  assert.deepEqual(prompts[0], [profile]);
+  await fs.rename(path.join(project.root, profile), path.join(project.root, renamed));
+  await waitUntil(() => prompts.length === 2);
+  assert.deepEqual(prompts[1], [profile, renamed]);
+  await fs.rm(path.join(project.root, renamed));
+  await waitUntil(() => prompts.length === 3);
+  assert.deepEqual(prompts[2], [profile, renamed]);
+  await preview.stop();
+});
+
+test('never rebuilds without a confirmation handler', { timeout: 5000 }, async (t) => {
+  const project = await fixture(t);
+  const preview = await runningPreview(t, project, {
+    requestRebuild: undefined,
+    rebuild: async () => assert.fail('no consent was given'),
+  });
+  await fs.writeFile(path.join(project.root, 'sushi-config.yaml'), 'id: example');
+  await waitUntil(() => preview.log.some((text) => text.includes('rebuild postponed')));
+  assert.equal(preview.isClosed(), false);
   await preview.stop();
 });
 
@@ -272,7 +396,7 @@ test('logs a failed rebuild and retries on the next edit without stopping the se
   await preview.stop();
 });
 
-test('Stop cancels an automatic Publisher build and awaits cleanup', { timeout: 5000 }, async (t) => {
+test('Stop cancels a confirmed Publisher build and awaits cleanup', { timeout: 5000 }, async (t) => {
   const project = await fixture(t);
   let buildSignal;
   let finishCleanup;

@@ -85,7 +85,7 @@ async function showSummary(summary) {
 
 async function showError(error) {
   if (error.name === 'AbortError') {
-    await vscode.window.showInformationMessage('Firely validation cancelled.');
+    await vscode.window.showInformationMessage('Validation cancelled.');
     return;
   }
   await vscode.window.showErrorMessage(error.message);

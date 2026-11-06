@@ -40,7 +40,7 @@ async function checkJekyll({ root, jekyllPath = 'jekyll', signal, log = () => {}
     ), { code: 'JEKYLL_UNAVAILABLE' });
   }
   if (version.code !== 0) {
-    throw Object.assign(new Error('Jekyll is installed but could not start. Check Ruby, Jekyll and the required gems in the MedCom IG Preview output.'), {
+    throw Object.assign(new Error('Jekyll is installed but could not start. Check Ruby, Jekyll and the required gems in the MedCom FHIR IG Helper: Live Preview output.'), {
       code: 'JEKYLL_UNAVAILABLE',
     });
   }
@@ -146,13 +146,14 @@ async function waitForServer(url, signal, timeout) {
     if (await responds(url, signal)) return;
     await delay(250, undefined, { signal });
   }
-  throw new Error('Jekyll did not become ready within two minutes. See the MedCom IG Preview output for details.');
+  throw new Error('Jekyll did not become ready within two minutes. See the MedCom FHIR IG Helper: Live Preview output for details.');
 }
 
 async function runPreview({
   root, port = 4000, jekyllPath = 'jekyll', signal,
   log = () => {}, onReady = async () => {}, run = runProcess,
-  rebuild, onRefresh = () => {}, pollInterval = 500, debounceInterval = 500, startupTimeout = 120000,
+  rebuild, requestRebuild = async () => false, onRefresh = () => {},
+  pollInterval = 500, debounceInterval = 500, startupTimeout = 120000,
 }) {
   checkCancelled(signal);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
@@ -190,49 +191,86 @@ async function runPreview({
       cwd: root, signal: controller.signal, onOutput: log, processGroup: true,
     }).then((result) => ({ result }), (error) => ({ error }));
     const exited = completion.then(({ result, error }) => {
-      throw error || new Error(`Jekyll stopped (exit ${result.code}). See the MedCom IG Preview output for details.`);
+      throw error || new Error(`Jekyll stopped (exit ${result.code}). See the MedCom FHIR IG Helper: Live Preview output for details.`);
     });
     await Promise.race([waitForServer(url, controller.signal, startupTimeout), exited]);
-    log(`\nPreview: ${url}\nWatching narrative pages, resource intros/notes, includes and images for fast refresh. FHIR and configuration changes use Publisher.\n`);
+    log(`\nPreview: ${url}\nWatching narrative pages, resource intros/notes, includes and images for fast refresh. FHIR and configuration changes require confirmation for a full genonce rebuild.\n`);
     async function watch() {
       let pending;
       let changedAt;
+      const rebuildFiles = new Set();
+      let revision = 0;
+      let notifiedRevision = 0;
+      let confirmation;
       while (true) {
         await delay(pollInterval, undefined, { signal: controller.signal });
         const current = await snapshot(controller.signal);
+        let changed = [];
         if (current.signature === builtSources.signature) {
           pending = undefined;
-          continue;
-        }
-        if (current.signature !== pending) {
-          pending = current.signature;
-          changedAt = Date.now();
-        }
-        if (Date.now() - changedAt < debounceInterval) continue;
-        const changed = [...new Set([...builtSources.files.keys(), ...current.files.keys()])]
-          .filter((file) => builtSources.files.get(file) !== current.files.get(file));
-        // Serialize refreshes, keeping the pre-render snapshot so saves made
-        // while Jekyll or Publisher runs are picked up on the next poll.
-        builtSources = current;
-        pending = undefined;
-        const textOnly = changed.every((file) => contentLocation(file, roots));
-        log(textOnly ? '\nRefreshing text and images without IG Publisher...\n'
-          : '\nFHIR or configuration files changed. Rebuilding with IG Publisher...\n');
-        try {
-          if (textOnly) {
-            onRefresh(true);
-            await refreshNarrative({ root, roots, files: changed, jekyllPath, signal: controller.signal, log, run });
-          } else {
-            await rebuild(controller.signal);
-            checkCancelled(controller.signal);
-            await requirePreviewBuild(root);
-            log('Publisher rebuild complete. Refreshing live preview.\n');
+        } else {
+          if (current.signature !== pending) {
+            pending = current.signature;
+            changedAt = Date.now();
           }
-        } catch (error) {
-          checkCancelled(controller.signal);
-          log(`${textOnly ? 'Text refresh' : 'Publisher rebuild'} failed: ${error.message}\nEdit a source file to retry.\n`);
-        } finally {
-          if (textOnly && !controller.signal.aborted) onRefresh(false);
+          if (Date.now() - changedAt >= debounceInterval) {
+            changed = [...new Set([...builtSources.files.keys(), ...current.files.keys()])]
+              .filter((file) => builtSources.files.get(file) !== current.files.get(file));
+            // Keep the pre-render snapshot so saves during a refresh or build
+            // are picked up on the next poll.
+            builtSources = current;
+            pending = undefined;
+          }
+        }
+        const narrativeFiles = changed.filter((file) => contentLocation(file, roots));
+        const publisherFiles = changed.filter((file) => !contentLocation(file, roots));
+        for (const file of publisherFiles) rebuildFiles.add(file);
+        if (publisherFiles.length) {
+          revision++;
+          log(`\nFull genonce rebuild requires confirmation. Changed files: ${[...rebuildFiles].sort().join(', ')}\n`);
+        }
+        if (narrativeFiles.length) {
+          log('\nRefreshing text and images without IG Publisher...\n');
+          onRefresh(true);
+          try {
+            await refreshNarrative({ root, roots, files: narrativeFiles, jekyllPath, signal: controller.signal, log, run });
+          } catch (error) {
+            checkCancelled(controller.signal);
+            log(`Text refresh failed: ${error.message}\nEdit a source file to retry.\n`);
+          } finally {
+            if (!controller.signal.aborted) onRefresh(false);
+          }
+        }
+        if (confirmation?.settled) {
+          const { confirmed, error } = confirmation;
+          confirmation = undefined;
+          try {
+            if (error) throw error;
+            if (!confirmed) {
+              log('Full genonce rebuild postponed. Preview continues using the existing Publisher output.\n');
+            } else {
+              log('\nRebuilding with IG Publisher...\n');
+              await rebuild(controller.signal);
+              checkCancelled(controller.signal);
+              await requirePreviewBuild(root);
+              rebuildFiles.clear();
+              notifiedRevision = revision;
+              log('Publisher rebuild complete. Refreshing live preview.\n');
+            }
+          } catch (error) {
+            checkCancelled(controller.signal);
+            log(`Publisher rebuild failed: ${error.message}\nEdit a source file to retry.\n`);
+          }
+        }
+        if (!confirmation && rebuildFiles.size && revision > notifiedRevision) {
+          notifiedRevision = revision;
+          const request = { settled: false };
+          confirmation = request;
+          // Keep polling FSH/configuration changes and refreshing narrative
+          // content while the user decides. Only the affirmative response builds.
+          void Promise.resolve().then(() => requestRebuild([...rebuildFiles].sort(), controller.signal))
+            .then((choice) => { request.confirmed = choice === true; request.settled = true; },
+              (error) => { request.error = error; request.settled = true; });
         }
       }
     }

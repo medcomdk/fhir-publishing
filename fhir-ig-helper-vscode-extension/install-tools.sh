@@ -3,7 +3,7 @@
 set -euo pipefail
 
 data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
-install_root="$data_home/medcom-firely-validation"
+install_root="$data_home/medcom-fhir-ig-helper"
 user_prefix="$HOME/.local"
 bin_dir="$user_prefix/bin"
 dotnet_dir="$install_root/dotnet"
@@ -126,4 +126,4 @@ fi
 npm --version
 sushi --version
 
-echo "Firely validation tools are ready."
+echo "MedCom FHIR IG Helper validation tools are ready."

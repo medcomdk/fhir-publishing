@@ -3,7 +3,7 @@ const path = require('node:path');
 const { chooseConfig } = require('./project');
 const { checkCancelled } = require('./process');
 const { runPreview, checkJekyll } = require('./preview');
-const { resolveJekyllPath, confirmPreviewSetup, confirmPublisherBuild, runPreviewSetup } = require('./preview-setup');
+const { resolveJekyllPath, confirmPreviewSetup, confirmPublisherBuild, confirmPublisherRebuild, runPreviewSetup } = require('./preview-setup');
 const { runPublisherBuild } = require('./preview-build');
 
 function createPreview(context, validationRunning) {
@@ -48,9 +48,9 @@ function createPreview(context, validationRunning) {
     const id = key(config);
     if (!interfaces.has(id)) {
       const root = path.dirname(config.fsPath);
-      const output = vscode.window.createOutputChannel(`MedCom IG Preview: ${root}`);
+      const output = vscode.window.createOutputChannel(`MedCom FHIR IG Helper: Live Preview: ${root}`);
       const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-      status.name = `MedCom IG Live Preview: ${root}`;
+      status.name = `MedCom FHIR IG Helper: Live Preview: ${root}`;
       status.command = { command: 'fhirIg.stopPreview', title: 'Stop IG live preview', arguments: [config] };
       context.subscriptions.push(output, status);
       interfaces.set(id, { output, status });
@@ -133,6 +133,7 @@ function createPreview(context, validationRunning) {
       port: settings.get('preview.port', 4000),
       signal,
       log: (text) => output.append(text),
+      requestRebuild: confirmPublisherRebuild,
       onRefresh: (refreshing) => {
         showStatus(session, refreshing ? '$(sync~spin) IG Preview: Refreshing text'
           : '$(radio-tower) IG Preview: Running');

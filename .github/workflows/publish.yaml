@@ -117,14 +117,14 @@ jobs:
           repository: medcomdk/fhir-publishing
           ref: main
           path: ${{ env.PUBLISHING_TOOLS_PATH }}
-          sparse-checkout: firely-validation-vscode-extension/validator
+          sparse-checkout: fhir-ig-helper-vscode-extension/validator
 
       - name: Validate built IG package with Firely .NET SDK
         id: sdk_validation
         continue-on-error: ${{ inputs.ALLOW_VALIDATION_FAILURE }}
         shell: bash
         run: |
-          dotnet run --project "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/firely-validation-vscode-extension/validator/FirelyValidator.csproj" --configuration Release -- \
+          dotnet run --project "$GITHUB_WORKSPACE/${{ env.PUBLISHING_TOOLS_PATH }}/fhir-ig-helper-vscode-extension/validator/FirelyValidator.csproj" --configuration Release -- \
             "$GITHUB_WORKSPACE/${{ env.IG_CONTAINER_PATH }}/output/package.tgz"
 
       - name: Report overridden SDK validation failure

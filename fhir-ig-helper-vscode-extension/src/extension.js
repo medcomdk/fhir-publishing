@@ -19,7 +19,7 @@ let preview;
 async function validateWithProgress(configUri, options, controller, ui) {
   return vscode.window.withProgress({
     location: vscode.ProgressLocation.Notification,
-    title: 'MedCom Firely Validation',
+    title: 'MedCom FHIR IG Helper',
     cancellable: true,
   }, async (progress, token) => {
     const subscription = token.onCancellationRequested(() => controller.abort());
@@ -88,7 +88,7 @@ async function startValidation(uri, ui, sdk = false) {
     return;
   }
   if (activeRun) {
-    await vscode.window.showWarningMessage('A Firely validation is already running. Wait for it or cancel it first.');
+    await vscode.window.showWarningMessage('A validation is already running. Wait for it or cancel it first.');
     return;
   }
   if (preview?.isRunning()) {
@@ -118,7 +118,7 @@ function activate(context) {
   shuttingDown = false;
   configureToolEnvironment(context.environmentVariableCollection);
   const ui = {
-    output: vscode.window.createOutputChannel('MedCom Firely Validation'),
+    output: vscode.window.createOutputChannel('MedCom FHIR IG Helper'),
     diagnostics: vscode.languages.createDiagnosticCollection('firely'),
     setupScript: context.asAbsolutePath('install-tools.sh'),
     environmentVariableCollection: context.environmentVariableCollection,
