@@ -21,11 +21,6 @@ on:
         required: false
         default: 'NONE'
         type: string
-      IG_TEMPLATE_REPO:
-        description: GitHub repository containing the FHIR IG template (owner/repository)
-        required: false
-        default: 'medcomdk/medcom-fhir-ig-template'
-        type: string
       WEBSITE_REPO:
         description: The name of the github repo that hosts the website
         required: false
@@ -47,7 +42,6 @@ jobs:
 
     env:
       IG_CONTAINER_PATH: "ig"
-      IG_TEMPLATE_PATH: "medcom-fhir-ig-template"
       RELEASE_VERSION: ${{ inputs.RELEASE_VERSION }}
       PUBLISHING_TOOLS_PATH: "fhir-publishing-tools"
 
@@ -56,32 +50,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ${{ env.IG_CONTAINER_PATH }}
-
-      - name: Checkout FHIR IG template
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ inputs.IG_TEMPLATE_REPO }}
-          path: ${{ env.IG_CONTAINER_PATH }}/${{ env.IG_TEMPLATE_PATH }}
-          persist-credentials: false
-
-      - name: Point ig.ini to the local FHIR IG template
-        shell: bash
-        working-directory: ${{ env.IG_CONTAINER_PATH }}
-        run: |
-          python3 - <<'PY'
-          import configparser
-          import os
-          from pathlib import Path
-
-          path = Path('ig.ini')
-          config = configparser.ConfigParser(interpolation=None)
-          config.optionxform = str
-          with path.open() as source:
-              config.read_file(source)
-          config.set('IG', 'template', '#' + os.environ['IG_TEMPLATE_PATH'])
-          with path.open('w') as destination:
-              config.write(destination)
-          PY
 
       - name: Validate IG source does NOT contain package-list.json
         shell: bash
