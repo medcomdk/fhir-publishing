@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const YAML = require('yaml');
 const { runProcess, checkCancelled } = require('./process');
+const { previewPagePrefix } = require('./preview-layout');
 
 const TEXT = /\.(md|xml|html|xhtml)$/i;
 const IMAGE = /\.(svg|png|jpe?g|gif|webp|avif|apng|bmp|ico|tiff?)$/i;
@@ -54,10 +55,23 @@ async function writeChanged(file, content, signal) {
 async function refreshNarrative({ root, files, roots, jekyllPath = 'jekyll', signal, log = () => {}, run = runProcess }) {
   const source = path.join(root, 'temp', 'pages');
   const destination = path.join(root, 'temp', 'preview-render');
+  const prefix = await previewPagePrefix(root);
   const targets = new Set();
   let pages;
   let pagesChanged = false;
   let sharedChanged = false;
+  function pagePath(page) {
+    return page.startsWith(prefix) ? page : prefix + page;
+  }
+  async function stageInclude(relative, content) {
+    let changed = false;
+    // Keep both Publisher's original includes and the default-language copies
+    // current. Shared template includes can still refer to the originals.
+    for (const directory of new Set(['', prefix])) {
+      if (await writeChanged(path.join(source, '_includes', directory, relative), content, signal)) changed = true;
+    }
+    return changed;
+  }
   async function pageData() {
     if (pages) return pages;
     const data = await readOptional(path.join(source, '_data', 'pages.json'));
@@ -71,11 +85,13 @@ async function refreshNarrative({ root, files, roots, jekyllPath = 'jekyll', sig
     if (!location) continue;
     const content = await readOptional(path.join(root, file));
     if (location.kind === 'image') {
-      const output = path.join(root, 'output', location.relative);
-      if (content) await writeChanged(output, content, signal);
-      else await fs.rm(output, { force: true });
+      for (const directory of new Set(['', prefix])) {
+        const output = path.join(root, 'output', directory, location.relative);
+        if (content) await writeChanged(output, content, signal);
+        else await fs.rm(output, { force: true });
+      }
       if (location.staged && await readOptional(path.join(source, '_config.yml'))) {
-        if (await writeChanged(path.join(source, '_includes', location.relative), content || Buffer.alloc(0), signal)) sharedChanged = true;
+        if (await stageInclude(location.relative, content || Buffer.alloc(0))) sharedChanged = true;
       }
       continue;
     }
@@ -84,10 +100,10 @@ async function refreshNarrative({ root, files, roots, jekyllPath = 'jekyll', sig
         code: 'PUBLISHER_BUILD_REQUIRED',
       });
     }
-    const include = path.join(source, '_includes', location.relative);
+    const include = path.join(source, '_includes', prefix, location.relative);
     const existing = await readOptional(include);
     if (content && existing?.equals(content)) continue;
-    const ordinaryPage = location.relative.replace(TEXT, '.html');
+    const ordinaryPage = pagePath(location.relative.replace(TEXT, '.html'));
     const isPage = location.kind === 'page' && !!await readOptional(path.join(source, ordinaryPage));
     const intro = !isPage && location.kind !== 'include' ? location.relative.match(INTRO) : undefined;
     if (intro) {
@@ -105,7 +121,7 @@ async function refreshNarrative({ root, files, roots, jekyllPath = 'jekyll', sig
           delete data[page][`${field}-type`];
         }
         pagesChanged = true;
-        targets.add(page);
+        targets.add(pagePath(page));
       }
       if (matching.length === 0) log(`No generated resource page for ${file}. A full Publisher build is needed to add the resource.\n`);
     } else if (location.kind === 'include') {
@@ -116,12 +132,13 @@ async function refreshNarrative({ root, files, roots, jekyllPath = 'jekyll', sig
     }
     // A deleted ordinary page stays empty until a full build updates navigation.
     // Deleted intro/notes includes are no longer referenced by the page data.
-    await writeChanged(include, content || Buffer.alloc(0), signal);
+    await stageInclude(location.relative, content || Buffer.alloc(0));
   }
   if (pagesChanged) await writeChanged(path.join(source, '_data', 'pages.json'), Buffer.from(JSON.stringify(pages)), signal);
   if (sharedChanged) {
     for (const page of Object.keys(await pageData())) {
-      if (page.endsWith('.html') && await readOptional(path.join(source, page))) targets.add(page);
+      const target = pagePath(page);
+      if (page.endsWith('.html') && await readOptional(path.join(source, target))) targets.add(target);
     }
   }
   if (targets.size === 0) return;

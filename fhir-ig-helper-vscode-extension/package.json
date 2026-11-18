@@ -3,7 +3,7 @@
   "displayName": "MedCom FHIR IG Helper",
   "description": "Firely validation, SDK validation and live preview for FHIR implementation guides.",
   "icon": "fire-in-pizza-oven_1.jpg",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "publisher": "MedComPublisher",
   "license": "UNLICENSED",
   "repository": {

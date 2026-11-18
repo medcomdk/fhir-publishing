@@ -6,6 +6,7 @@ const { createHash } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 const { runProcess, checkCancelled } = require('./process');
 const { narrativeRoots, contentLocation, refreshNarrative } = require('./preview-content');
+const { previewPagePrefix } = require('./preview-layout');
 
 // Keep starting sessions from selecting the same ports before Jekyll binds.
 const reservedPorts = new Set();
@@ -21,10 +22,13 @@ async function requireFile(file, message, code) {
 }
 
 async function requirePreviewBuild(root) {
-  const message = 'Run a full IG Publisher build first. Live preview needs output/index.html and output/qa.html.';
-  for (const file of ['index.html', 'qa.html']) {
+  const prefix = await previewPagePrefix(root);
+  const index = prefix + 'index.html';
+  const message = `Run a full IG Publisher build first. Live preview needs output/${index} and output/qa.html.`;
+  for (const file of [index, 'qa.html']) {
     await requireFile(path.join(root, 'output', file), message, 'PUBLISHER_BUILD_REQUIRED');
   }
+  return prefix;
 }
 
 async function checkJekyll({ root, jekyllPath = 'jekyll', signal, log = () => {}, run = runProcess }) {
@@ -160,7 +164,7 @@ async function runPreview({
     throw new Error('fhirIg.preview.port must be an integer between 1 and 65535.');
   }
   const source = path.join(root, 'output');
-  await requirePreviewBuild(root);
+  const prefix = await requirePreviewBuild(root);
   const roots = await narrativeRoots(root);
   const snapshot = createSourceSnapshot(root, roots);
   let builtSources = await snapshot(signal);
@@ -175,7 +179,7 @@ async function runPreview({
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });
   if (signal?.aborted) abort();
-  const url = `http://127.0.0.1:${port}/`;
+  const url = `http://127.0.0.1:${port}/${prefix}`;
   let completion;
   let watching;
   try {
